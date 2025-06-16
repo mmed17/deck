@@ -197,6 +197,24 @@ class BoardService {
 		$board->setOwner($userId);
 		$board->setColor($color);
 		$new_board = $this->boardMapper->insert($board);
+		
+		// create default stacks
+		$default_stacks = [
+			$this->l10n->t('To do'),
+			$this->l10n->t('In progress'),
+			$this->l10n->t('Done')
+		];
+		$stacks = [];
+		foreach ($default_stacks as $index => $stackTitle) {
+			$stack = new Stack();
+			$stack->setTitle($stackTitle);
+			$stack->setOrder($index);
+			$stack->setBoardId($new_board->getId());
+			$stacks[] = $stack;
+			$this->stackMapper->insert($stack);
+		}
+		
+		$new_board->setStacks($stacks);
 
 		// create new labels
 		$default_labels = [
