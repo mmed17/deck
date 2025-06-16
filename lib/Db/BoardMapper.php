@@ -429,6 +429,26 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		return false;
 	}
 
+	/**
+	 * Check if a board is shared with anyone.
+	 * @param int $boardId
+	 * @return bool
+	 */
+	public function isShared(int $boardId): bool {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('b.id')
+			->from('deck_boards', 'b')
+			->innerJoin('b', 'deck_board_acl', 'acl', $qb->expr()->eq('b.id', 'acl.board_id'))
+			->where($qb->expr()->eq('b.id', $qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)));
+		try {
+			$this->findEntity($qb);
+			return true;
+		} catch (DoesNotExistException $e) {
+			// Expected return falue
+		}
+		return false;
+	}
+
 	public function findAll(): array {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('id')

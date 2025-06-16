@@ -365,10 +365,15 @@ class BoardService {
 	 * @throws NoPermissionException
 	 */
 	public function addAcl($boardId, $type, $participant, $edit, $share, $manage) {
+
 		$this->boardServiceValidator->check(compact('boardId', 'type', 'participant', 'edit', 'share', 'manage'));
 
 		$this->permissionService->checkPermission($this->boardMapper, $boardId, Acl::PERMISSION_SHARE);
 		[$edit, $share, $manage] = $this->applyPermissions($boardId, $edit, $share, $manage);
+
+		if($type === Acl::PERMISSION_TYPE_CIRCLE && $this->boardMapper->isShared($boardId)) {
+			throw new BadRequestException('This board is already shared.');
+		}
 
 		$acl = new Acl();
 		$acl->setBoardId($boardId);
@@ -392,6 +397,7 @@ class BoardService {
 			$resourceProvider = Server::get(\OCA\Deck\Collaboration\Resources\ResourceProvider::class);
 			$resourceProvider->invalidateAccessCache($boardId);
 		} catch (\Exception $e) {
+
 		}
 
 		$this->eventDispatcher->dispatchTyped(new AclCreatedEvent($acl));
