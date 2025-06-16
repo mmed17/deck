@@ -371,7 +371,7 @@ class BoardService {
 		$this->permissionService->checkPermission($this->boardMapper, $boardId, Acl::PERMISSION_SHARE);
 		[$edit, $share, $manage] = $this->applyPermissions($boardId, $edit, $share, $manage);
 
-		if($type === Acl::PERMISSION_TYPE_CIRCLE && $this->boardMapper->isShared($boardId)) {
+		if($this->boardMapper->isShared($boardId)) {
 			throw new BadRequestException('This board is already shared.');
 		}
 
