@@ -4,7 +4,7 @@
 -->
 <template>
 	<div>
-		<NcSelect v-if="canShare"
+		<NcSelect v-if="canShare && board.acl.length === 0"
 			v-model="addAcl"
 			:input-label="t('deck', 'Share board with a user, group or team …')"
 			:options="formatedSharees"
