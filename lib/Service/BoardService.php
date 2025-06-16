@@ -213,15 +213,14 @@ class BoardService {
 			$stacks[] = $stack;
 			$this->stackMapper->insert($stack);
 		}
-		
+
 		$new_board->setStacks($stacks);
 
 		// create new labels
 		$default_labels = [
-			'31CC7C' => $this->l10n->t('Finished'),
-			'317CCC' => $this->l10n->t('To review'),
-			'FF7A66' => $this->l10n->t('Action needed'),
-			'F1DB50' => $this->l10n->t('Later')
+			'31CC7C' => $this->l10n->t('Customer'),
+			'317CCC' => $this->l10n->t('Owner'),
+			'FF7A66' => $this->l10n->t('Mediator')
 		];
 		$labels = [];
 		foreach ($default_labels as $labelColor => $labelTitle) {
