@@ -77,19 +77,29 @@ class AssignmentMapper extends DeckMapper implements IPermissionMapper {
 	}
 
 	public function deleteByParticipantOnBoard(string $participant, int $boardId, $type = Assignment::TYPE_USER) {
+		$cardIdQuery = $this->db->getQueryBuilder();
+
+		$cardIdQuery->select('a.card_id')
+			->from('deck_assigned_users', 'a')
+			->innerJoin('a', 'deck_cards', 'c', 'c.id = a.card_id')
+			->innerJoin('c', 'deck_stacks', 's', 's.id = c.stack_id')
+			->where($cardIdQuery->expr()->eq('a.participant', $cardIdQuery->createNamedParameter($participant, IQueryBuilder::PARAM_STR)))
+			->andWhere($cardIdQuery->expr()->eq('s.board_id', $cardIdQuery->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)))
+			->andWhere($cardIdQuery->expr()->eq('a.type', $cardIdQuery->createNamedParameter($type, IQueryBuilder::PARAM_INT)));
+
+		$cardIDs = $cardIdQuery->execute()->fetchAll(\PDO::FETCH_COLUMN);
+
+		if (empty($cardIDs)) {
+			return;
+		}
+
 		$qb = $this->db->getQueryBuilder();
 
-		// This rewritten query uses a multi-table DELETE with JOINs, which avoids the subquery error.
-		$qb->delete('deck_assigned_users', 'a')
-			->innerJoin('a', 'deck_cards', 'c', $qb->expr()->eq('a.card_id', 'c.id'))
-			->innerJoin('c', 'deck_stacks', 's', $qb->expr()->eq('c.stack_id', 's.id'))
-			->where($qb->expr()->eq('s.board_id', $qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('a.participant', $qb->createNamedParameter($participant, IQueryBuilder::PARAM_STR)))
-			->andWhere($qb->expr()->eq('a.type', $qb->createNamedParameter($type, IQueryBuilder::PARAM_INT)));
+		$qb->delete('deck_assigned_users')
+			->where($qb->expr()->in('card_id', $qb->createNamedParameter($cardIDs, IQueryBuilder::PARAM_INT_ARRAY)));
 
 		$qb->executeStatement();
 	}
-
 
 	public function isOwner($userId, $id): bool {
 		return $this->cardMapper->isOwner($userId, $id);

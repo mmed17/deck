@@ -450,7 +450,10 @@ class BoardService {
 		$acl = $this->aclMapper->find($id);
 		$this->boardMapper->mapAcl($acl);
 		if ($acl->getType() === Acl::PERMISSION_TYPE_USER) {
-			$this->assignedUsersMapper->deleteByParticipantOnBoard($acl->getParticipant(), $acl->getBoardId());
+			$this->assignedUsersMapper->deleteByParticipantOnBoard(
+				$acl->getParticipant(), 
+				$acl->getBoardId()
+			);
 		}
 
 		$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_BOARD, $acl, ActivityManager::SUBJECT_BOARD_UNSHARE);
