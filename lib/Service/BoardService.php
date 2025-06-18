@@ -185,7 +185,7 @@ class BoardService {
 	 * @return \OCP\AppFramework\Db\Entity
 	 * @throws BadRequestException
 	 */
-	public function create($title, $userId, $color) {
+	public function create($title, $userId, $color): Board {
 		$this->boardServiceValidator->check(compact('title', 'userId', 'color'));
 
 		if (!$this->permissionService->canCreate()) {
