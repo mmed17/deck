@@ -70,8 +70,7 @@ class BoardService {
 		private BoardServiceValidator $boardServiceValidator,
 		private SessionMapper $sessionMapper,
 		private ?string $userId,
-	) {
-	}
+	) {}
 
 	/**
 	 * Set a different user than the current one, e.g. when no user is available in occ
