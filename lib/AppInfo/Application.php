@@ -122,7 +122,8 @@ class Application extends App implements IBootstrap {
 		$context->registerSearchProvider(DeckProvider::class);
 		$context->registerSearchProvider(CardCommentProvider::class);
 		$context->registerDashboardWidget(DeckWidgetUpcoming::class);
-		$context->registerDashboardWidget(DeckWidgetOpen::class);
+		// TEST: I think there is no need for open cards
+		// $context->registerDashboardWidget(DeckWidgetOpen::class);
 		$context->registerDashboardWidget(DeckWidgetOverdue::class);
 
 		$context->registerReferenceProvider(CreateCardReferenceProvider::class);
