@@ -9,11 +9,14 @@ namespace OCA\Deck\Model;
 use OCA\Deck\Db\Board;
 use OCA\Deck\Db\Card;
 use OCP\Collaboration\Reference\Reference;
+use OCA\Deck\Db\Project;
 
 class CardDetails extends Card {
 	private Card $card;
 	private ?Board $board;
 	private ?Reference $referenceData = null;
+
+	public ?Project $project = null;
 
 	public function __construct(Card $card, ?Board $board = null) {
 		parent::__construct();
@@ -31,6 +34,16 @@ class CardDetails extends Card {
 
 	public function jsonSerialize(array $extras = []): array {
 		$array = parent::jsonSerialize();
+
+		if ($this->project !== null) {
+            $array['project'] = [
+                'id' => $this->project->getId(),
+                'name' => $this->project->getName(),
+                'number' => $this->project->getNumber(),
+				'circle_id' => $this->project->getCircleId(),
+            ];
+        }
+
 		$array['overdue'] = $this->getDueStatus();
 
 		unset($array['notified']);

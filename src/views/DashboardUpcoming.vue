@@ -8,7 +8,7 @@
 		<NcDashboardWidget :items="cards"
 			empty-content-icon="icon-deck"
 			:empty-content-message="t('deck', 'No upcoming cards')"
-			:show-more-text="t('deck', 'upcoming cards')"
+			:show-more-text="t('deck', 'upcoming cards ...')"
 			:loading="loading"
 			@hide="() => {}"
 			@markDone="() => {}">

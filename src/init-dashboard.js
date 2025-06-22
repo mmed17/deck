@@ -52,17 +52,16 @@ document.addEventListener('DOMContentLoaded', () => {
 		return vm
 	})
 
-	// TEST: I think open cards are just duplication
-	// OCA.Dashboard.register('deckOpen', async (el) => {
-	// 	const { Vue, store } = await getAsyncImports()
-	// 	const { default: DashboardOpen } = await import('./views/DashboardOpen.vue')
-	// 	const View = Vue.extend(DashboardOpen)
-	// 	const vm = new View({
-	// 		propsData: {},
-	// 		store,
-	// 	}).$mount(el)
-	// 	return vm
-	// })
+	OCA.Dashboard.register('deckOpen', async (el) => {
+		const { Vue, store } = await getAsyncImports()
+		const { default: DashboardOpen } = await import('./views/DashboardOpen.vue')
+		const View = Vue.extend(DashboardOpen)
+		const vm = new View({
+			propsData: {},
+			store,
+		}).$mount(el)
+		return vm
+	})
 
 	OCA.Dashboard.register('deckOverdue', async (el) => {
 		const { Vue, store } = await getAsyncImports()

@@ -12,6 +12,7 @@ namespace OCA\Deck\Db;
 use DateTime;
 use DateTimeZone;
 use Sabre\VObject\Component\VCalendar;
+use OCA\Deck\Db\Project;
 
 /**
  * @method string getTitle()
@@ -82,6 +83,9 @@ class Card extends RelationalEntity {
 
 	protected $relatedStack = null;
 	protected $relatedBoard = null;
+	
+	/** @var ?Project */
+    public ?Project $project = null;
 
 	private $databaseType = 'sqlite';
 

@@ -19,6 +19,7 @@ use OCA\Deck\Db\CardMapper;
 use OCA\Deck\Db\ChangeHelper;
 use OCA\Deck\Db\Label;
 use OCA\Deck\Db\LabelMapper;
+use OCA\Deck\Db\ProjectMapper;
 use OCA\Deck\Db\StackMapper;
 use OCA\Deck\Event\CardCreatedEvent;
 use OCA\Deck\Event\CardDeletedEvent;
@@ -61,6 +62,7 @@ class CardService {
 		private AssignmentService $assignmentService,
 		private IReferenceManager $referenceManager,
 		private ?string $userId,
+		private ProjectMapper $projectMapper
 	) {
 	}
 
@@ -85,6 +87,11 @@ class CardService {
 			$board = $this->boardService->find($stack->getBoardId(), false);
 			$card->setRelatedStack($stack);
 			$card->setRelatedBoard($board);
+
+			$project = $this->projectMapper->findByBoardId($board->getId());
+			if ($project !== null) {
+				$card->setProject($project);
+			}
 
 			return $card->getId();
 		}, $cards);
@@ -112,6 +119,10 @@ class CardService {
 				if ($reference) {
 					$referenceData = $this->referenceManager->resolveReference($reference);
 					$cardDetails->setReferenceData($referenceData);
+				}
+
+				if ($card->getProject() !== null) {
+					$cardDetails->setProject($card->getProject());
 				}
 
 				return $cardDetails;

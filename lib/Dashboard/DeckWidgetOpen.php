@@ -35,7 +35,7 @@ class DeckWidgetOpen implements IWidget {
 	 * @inheritDoc
 	 */
 	public function getTitle(): string {
-		return $this->l10n->t('Open Tasks');
+		return $this->l10n->t('Non-due Tasks');
 	}
 
 	/**

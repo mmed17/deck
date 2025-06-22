@@ -7,7 +7,7 @@
 	<NcDashboardWidget :items="cards"
 		empty-content-icon="icon-deck"
 		:empty-content-message="t('deck', 'No overdue tasks')"
-		:show-more-text="t('deck', 'overdue tasks')"
+		:show-more-text="t('deck', 'overdue tasks ...')"
 		:show-more-url="showMoreUrl"
 		:loading="loading"
 		@hide="() => {}"
