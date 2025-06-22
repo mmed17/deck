@@ -40,7 +40,7 @@ const getAsyncImports = async () => {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-	OCA.Dashboard.register('deck', async (el) => {
+	OCA.Dashboard.register('deckUpcoming', async (el) => {
 		const { Vue, store } = await getAsyncImports()
 		const { default: DashboardUpcoming } = await import('./views/DashboardUpcoming.vue')
 
@@ -52,10 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
 		return vm
 	})
 
-	OCA.Dashboard.register('deckToday', async (el) => {
+	OCA.Dashboard.register('deckOpen', async (el) => {
 		const { Vue, store } = await getAsyncImports()
-		const { default: DashboardToday } = await import('./views/DashboardToday.vue')
-		const View = Vue.extend(DashboardToday)
+		const { default: DashboardOpen } = await import('./views/DashboardOpen.vue')
+		const View = Vue.extend(DashboardOpen)
 		const vm = new View({
 			propsData: {},
 			store,
@@ -63,10 +63,10 @@ document.addEventListener('DOMContentLoaded', () => {
 		return vm
 	})
 
-	OCA.Dashboard.register('deckTomorrow', async (el) => {
+	OCA.Dashboard.register('deckOverdue', async (el) => {
 		const { Vue, store } = await getAsyncImports()
-		const { default: DashboardTomorrow } = await import('./views/DashboardTomorrow.vue')
-		const View = Vue.extend(DashboardTomorrow)
+		const { default: DashboardOverdue } = await import('./views/DashboardOverdue.vue')
+		const View = Vue.extend(DashboardOverdue)
 		const vm = new View({
 			propsData: {},
 			store,

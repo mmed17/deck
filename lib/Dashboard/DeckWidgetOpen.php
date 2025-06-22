@@ -12,7 +12,7 @@ namespace OCA\Deck\Dashboard;
 use OCP\Dashboard\IWidget;
 use OCP\IL10N;
 
-class DeckWidgetTomorrow implements IWidget {
+class DeckWidgetOpen implements IWidget {
 
 	/**
 	 *
@@ -28,14 +28,14 @@ class DeckWidgetTomorrow implements IWidget {
 	 * @inheritDoc
 	 */
 	public function getId(): string {
-		return 'deckTomorrow';
+		return 'deckOpen';
 	}
 
 	/**
 	 * @inheritDoc
 	 */
 	public function getTitle(): string {
-		return $this->l10n->t('Cards due tomorrow');
+		return $this->l10n->t('Open Tasks');
 	}
 
 	/**

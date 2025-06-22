@@ -13,8 +13,8 @@ use OCA\Circles\Events\CircleDestroyedEvent;
 use OCA\Deck\Capabilities;
 use OCA\Deck\Collaboration\Resources\ResourceProvider;
 use OCA\Deck\Collaboration\Resources\ResourceProviderCard;
-use OCA\Deck\Dashboard\DeckWidgetToday;
-use OCA\Deck\Dashboard\DeckWidgetTomorrow;
+use OCA\Deck\Dashboard\DeckWidgetOpen;
+use OCA\Deck\Dashboard\DeckWidgetOverdue;
 use OCA\Deck\Dashboard\DeckWidgetUpcoming;
 use OCA\Deck\Db\Acl;
 use OCA\Deck\Db\CardMapper;
@@ -122,8 +122,8 @@ class Application extends App implements IBootstrap {
 		$context->registerSearchProvider(DeckProvider::class);
 		$context->registerSearchProvider(CardCommentProvider::class);
 		$context->registerDashboardWidget(DeckWidgetUpcoming::class);
-		$context->registerDashboardWidget(DeckWidgetToday::class);
-		$context->registerDashboardWidget(DeckWidgetTomorrow::class);
+		$context->registerDashboardWidget(DeckWidgetOpen::class);
+		$context->registerDashboardWidget(DeckWidgetOverdue::class);
 
 		$context->registerReferenceProvider(CreateCardReferenceProvider::class);
 

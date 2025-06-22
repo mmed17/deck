@@ -43,14 +43,14 @@ class DeckWidgetUpcoming implements IAPIWidget, IButtonWidget, IIconWidget {
 	 * @inheritDoc
 	 */
 	public function getId(): string {
-		return 'deck';
+		return 'deckUpcoming';
 	}
 
 	/**
 	 * @inheritDoc
 	 */
 	public function getTitle(): string {
-		return $this->l10n->t('Upcoming cards');
+		return $this->l10n->t('Upcoming tasks');
 	}
 
 	/**

@@ -7,7 +7,7 @@
 	<NcDashboardWidget :items="cards"
 		empty-content-icon="icon-deck"
 		:empty-content-message="t('deck', 'No upcoming cards')"
-		:show-more-text="t('deck', 'upcoming cards today')"
+		:show-more-text="t('deck', 'upcoming cards tomorrow')"
 		:show-more-url="showMoreUrl"
 		:loading="loading"
 		@hide="() => {}"
@@ -25,7 +25,7 @@ import Card from '../components/dashboard/Card.vue'
 import { generateUrl } from '@nextcloud/router'
 
 export default {
-	name: 'DashboardToday',
+	name: 'DashboardOverdue',
 	components: {
 		NcDashboardWidget,
 		Card,
@@ -40,13 +40,14 @@ export default {
 			'assignedCardsDashboard',
 		]),
 		cards() {
-			const today = new Date()
+			const tomorrow = new Date()
+			tomorrow.setDate(tomorrow.getDate() + 1)
 			const list = [
 				...this.assignedCardsDashboard,
 			].filter((card) => {
 				return card.duedate !== null
 			}).filter((card) => {
-				return (new Date(card.duedate)).getDate() === (new Date(today)).getDate()
+				return (new Date(card.duedate)).getDate() === (new Date(tomorrow)).getDate()
 			})
 			list.sort((a, b) => {
 				return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()
