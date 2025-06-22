@@ -13,7 +13,7 @@
 			@hide="() => {}"
 			@markDone="() => {}">
 			<template #default="{ item }">
-				<Card :card="item" />
+				<Card :card="item" :redirect-to-project="true" />
 			</template>
 		</NcDashboardWidget>
 

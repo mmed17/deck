@@ -4,7 +4,7 @@
 -->
 <template>
 	<a :key="card.id"
-		:href="cardLink"
+		@click="redirect"
 		target="_blank"
 		class="card">
 		<div class="card--header">
@@ -34,12 +34,26 @@ export default {
 		  type: Object,
 			required: true,
 		},
+		redirectToProject: {
+			type: Boolean,
+			default: false
+		}
 	},
 	computed: {
 		cardLink() {
-			return generateUrl('/apps/deck') + `#/board/${this.card.boardId}/card/${this.card.id}`
+			if(this.redirectToProject && this.card.project) {
+				return generateUrl('/apps/contacts/circle') + `/${this.card.project.circleId}`;
+			} else {
+				return generateUrl('/apps/deck') + `#/board/${this.card.boardId}/card/${this.card.id}`
+			}
 		},
 	},
+	methods: {
+		redirect() {
+			const url = this.cardLink;
+			document.location.href = url;
+		}
+	}
 }
 </script>
 
