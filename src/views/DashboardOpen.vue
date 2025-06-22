@@ -6,8 +6,8 @@
 <template>
 	<NcDashboardWidget :items="cards"
 		empty-content-icon="icon-deck"
-		:empty-content-message="t('deck', 'No upcoming cards')"
-		:show-more-text="t('deck', 'upcoming cards today')"
+		:empty-content-message="t('deck', 'No open tasks')"
+		:show-more-text="t('deck', 'open tasks')"
 		:show-more-url="showMoreUrl"
 		:loading="loading"
 		@hide="() => {}"
@@ -40,14 +40,11 @@ export default {
 			'assignedCardsDashboard',
 		]),
 		cards() {
-			const today = new Date()
 			const list = [
 				...this.assignedCardsDashboard,
 			].filter((card) => {
-				return card.duedate !== null
-			}).filter((card) => {
-				return (new Date(card.duedate)).getDate() === (new Date(today)).getDate()
-			})
+				return !card.done;
+			});
 			list.sort((a, b) => {
 				return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()
 			})

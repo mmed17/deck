@@ -97,6 +97,7 @@ class DeckWidgetUpcoming implements IAPIWidget, IButtonWidget, IIconWidget {
 	 */
 	public function getItems(string $userId, ?string $since = null, int $limit = 7): array {
 		$upcomingCards = $this->dashboardService->findUpcomingCards($userId);
+
 		$nowTimestamp = (new Datetime())->getTimestamp();
 		$sinceTimestamp = $since !== null ? (new Datetime($since))->getTimestamp() : null;
 		$upcomingCards = array_filter($upcomingCards, static function (array $card) use ($nowTimestamp, $sinceTimestamp) {

@@ -16,8 +16,9 @@
 				<Card :card="item" />
 			</template>
 		</NcDashboardWidget>
+
 		<div class="center-button">
-			<NcButton @click="toggleAddCardModel">
+			<NcButton v-if="isAdmin" @click="toggleAddCardModel">
 				<template #icon>
 					<PlusIcon :size="20" />
 				</template>
@@ -37,6 +38,7 @@ import { mapGetters } from 'vuex'
 import Card from '../components/dashboard/Card.vue'
 import { generateUrl } from '@nextcloud/router'
 import CreateNewCardCustomPicker from './CreateNewCardCustomPicker.vue'
+import { getCurrentUser } from '@nextcloud/auth'
 
 export default {
 	name: 'DashboardUpcoming',
@@ -58,11 +60,16 @@ export default {
 		...mapGetters([
 			'assignedCardsDashboard',
 		]),
+		isAdmin() {
+			return !!getCurrentUser()?.isAdmin
+		},
 		cards() {
+			console.log('assignedCardsDashboard', this.assignedCardsDashboard);
+
 			const list = [
 				...this.assignedCardsDashboard,
 			].filter((card) => {
-				return card.duedate !== null
+				return !card.done && new Date(card.duedate) > new Date();
 			})
 			list.sort((a, b) => {
 				return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()

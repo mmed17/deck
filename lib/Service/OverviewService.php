@@ -54,6 +54,7 @@ class OverviewService {
 		$boardOwnerIds = array_filter(array_map(function (Board $board) {
 			return count($board->getAcl()) === 0 ? $board->getId() : null;
 		}, $userBoards));
+
 		$boardSharedIds = array_filter(array_map(function (Board $board) {
 			return count($board->getAcl()) > 0 ? $board->getId() : null;
 		}, $userBoards));
@@ -86,6 +87,7 @@ class OverviewService {
 			$card = (new CardDetails($card, $card->getRelatedBoard()));
 			$overview[$key][] = $card->jsonSerialize();
 		}
+		
 		return $overview;
 	}
 }

@@ -6,8 +6,8 @@
 <template>
 	<NcDashboardWidget :items="cards"
 		empty-content-icon="icon-deck"
-		:empty-content-message="t('deck', 'No upcoming cards')"
-		:show-more-text="t('deck', 'upcoming cards tomorrow')"
+		:empty-content-message="t('deck', 'No overdue tasks')"
+		:show-more-text="t('deck', 'overdue tasks')"
 		:show-more-url="showMoreUrl"
 		:loading="loading"
 		@hide="() => {}"
@@ -45,7 +45,7 @@ export default {
 			const list = [
 				...this.assignedCardsDashboard,
 			].filter((card) => {
-				return card.duedate !== null
+				return !card.done && new Date(card.duedate) <= new Date();
 			}).filter((card) => {
 				return (new Date(card.duedate)).getDate() === (new Date(tomorrow)).getDate()
 			})
