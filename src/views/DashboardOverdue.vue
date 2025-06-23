@@ -57,7 +57,16 @@ export default {
 			return list
 		},
 		showMoreUrl() {
-			return this.cards.length > 7 ? generateUrl('/apps/deck') : null
+			const hasMore = this.cards.length > 7;
+            if (!hasMore) {
+                return null;
+            }
+			
+            if (this.selectedBoardId) {
+                return generateUrl('/apps/deck/board/') + this.selectedBoardId;
+            } else {
+                return generateUrl('/apps/deck');
+            }
 		},
 	},
 	watch: {

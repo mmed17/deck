@@ -9,3 +9,7 @@
 body.dark .icon-deck {
 	background-image: url(./../../img/deck.svg);
 }
+
+.panel--content {
+	overflow-y: auto !important;
+}

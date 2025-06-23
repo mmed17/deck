@@ -9,7 +9,9 @@
 			empty-content-icon="icon-deck"
 			:empty-content-message="t('deck', 'No upcoming cards')"
 			:show-more-text="t('deck', 'upcoming cards ...')"
+			:show-more-url="showMoreUrl"
 			:loading="loading"
+			:limit="5"
 			@hide="() => {}"
 			@markDone="() => {}">
 			<template #default="{ item }">
@@ -67,19 +69,28 @@ export default {
 			return !!getCurrentUser()?.isAdmin
 		},
 		cards() {
-			const list = [
-				...this.assignedCardsDashboard,
-			].filter((card) => {
-				return card.duedate && new Date(card.duedate) > new Date();
-			})
-			list.sort((a, b) => {
-				return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()
-			})
-			return list.slice(0, 5)
-		},
+            const list = [
+                ...this.assignedCardsDashboard,
+            ].filter((card) => {
+                return card.duedate && new Date(card.duedate) > new Date();
+            })
+            list.sort((a, b) => {
+                return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()
+            })
+            return list;
+        },
 		showMoreUrl() {
-			return this.cards.length > 7 ? generateUrl('/apps/deck') : null
-		},
+            const hasMore = this.cards.length > 5;
+            if (!hasMore) {
+                return null;
+            }
+
+            if (this.selectedBoardId) {
+                return generateUrl('/apps/deck/board/') + this.selectedBoardId;
+            } else {
+                return generateUrl('/apps/deck');
+            }
+        },
 	},
 	watch: {
 		selectedBoardId(newValue, oldValue) {
