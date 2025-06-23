@@ -146,6 +146,35 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 		return $this->findEntities($qb);
 	}
 
+	 /**
+     * Finds all cards within a stack that are explicitly assigned to a given user.
+     *
+     * @param int $stackId
+     * @param string $userId
+     * @param int $since
+     * @return array
+     */
+    public function findAssignedToUserInStack(
+		int $stackId, string $userId, $limit = null, $offset = null, int $since = -1
+	): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('c.*')
+            ->from('deck_cards', 'c')
+            ->innerJoin('c', 'deck_assigned_users', 'a', $qb->expr()->eq('c.id', 'a.card_id'))
+            ->where($qb->expr()->eq('c.stack_id', $qb->createNamedParameter($stackId, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->eq('c.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
+            ->andWhere($qb->expr()->eq('c.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->gt('c.last_modified', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->eq('a.participant', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->eq('a.type', $qb->createNamedParameter(Assignment::TYPE_USER, IQueryBuilder::PARAM_INT)))
+			->setMaxResults($limit)
+			->setFirstResult($offset)
+            ->orderBy('c.order')
+            ->addOrderBy('c.id');
+
+        return $this->findEntities($qb);
+    }
+
 	public function queryCardsByBoard(int $boardId): IQueryBuilder {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('c.*')

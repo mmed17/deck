@@ -29,7 +29,7 @@ class StackController extends Controller {
 	 * @return array
 	 */
 	public function index($boardId) {
-		return $this->stackService->findAll($boardId);
+		return $this->stackService->findAll($this->userId, $boardId);
 	}
 
 	/**

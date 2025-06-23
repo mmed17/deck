@@ -15,6 +15,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
 use Sabre\HTTP\Util;
+use OCP\IUserSession;
 
 /**
  * Class StackApiController
@@ -30,6 +31,7 @@ class StackApiController extends ApiController {
 		IRequest $request,
 		private StackService $stackService,
 		private BoardService $boardService,
+		private IUserSession $userSession,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -51,7 +53,13 @@ class StackApiController extends ApiController {
 			}
 			$since = $date->getTimestamp();
 		}
-		$stacks = $this->stackService->findAll($this->request->getParam('boardId'), $since);
+
+		$userId = $this->userSession->getUID();
+		$stacks = $this->stackService->findAll(
+			$userId,
+			$this->request->getParam('boardId'), 
+			$since
+		);
 		return new DataResponse($stacks, HTTP::STATUS_OK);
 	}
 

@@ -75,19 +75,37 @@ class StackService {
 		$this->stackServiceValidator = $stackServiceValidator;
 	}
 
-	private function enrichStackWithCards($stack, $since = -1) {
-		$cards = $this->cardMapper->findAll($stack->getId(), null, null, $since);
+	private function enrichStackWithCards($userId, $stack, $since = -1) {
+        $cards = [];
+		$board = $this->boardMapper->find($stack->getBoardId());
 
-		if (\count($cards) === 0) {
-			return;
-		}
+        if ($board->getOwner() === $userId) {
+            $cards = $this->cardMapper->findAll(
+				$stack->getId(), 
+				null, 
+				null, 
+				$since
+			);
+        } else {
+            $cards = $this->cardMapper->findAssignedToUserInStack(
+				$stack->getId(), 
+				$userId,
+				null,
+				null,
+				$since
+			);
+        }
 
-		$stack->setCards($this->cardService->enrichCards($cards));
+        if (\count($cards) === 0) {
+            return;
+        }
+
+        $stack->setCards($this->cardService->enrichCards($cards));
 	}
 
-	private function enrichStacksWithCards($stacks, $since = -1) {
+	private function enrichStacksWithCards($userId, $stacks, $since = -1) {
 		foreach ($stacks as $stack) {
-			$this->enrichStackWithCards($stack, $since);
+			$this->enrichStackWithCards($userId, $stack, $since);
 		}
 	}
 
@@ -124,20 +142,22 @@ class StackService {
 	}
 
 	/**
+	 * @param $userId
 	 * @param $boardId
+	 * @param $since
 	 *
 	 * @return array
 	 * @throws \OCA\Deck\NoPermissionException
 	 * @throws BadRequestException
 	 */
-	public function findAll($boardId, $since = -1) {
+	public function findAll(string $userId, string $boardId, int $since = -1) {
 		if (is_numeric($boardId) === false) {
 			throw new BadRequestException('boardId must be a number');
 		}
 
 		$this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_READ);
 		$stacks = $this->stackMapper->findAll($boardId);
-		$this->enrichStacksWithCards($stacks, $since);
+		$this->enrichStacksWithCards($userId, $stacks, $since);
 
 		return $stacks;
 	}
