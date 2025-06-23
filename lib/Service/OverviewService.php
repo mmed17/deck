@@ -63,29 +63,41 @@ class OverviewService {
                 return [];
             }
 
-			if (count($board->getAcl()) > 0) {
-                $foundCards = $this->cardMapper->findToMeOrNotAssignedCards([$boardId], $userId);
-            } else {
-                $foundCards = $this->cardMapper->findAllWithDue([$boardId]);
-            }
+			if ($board->getOwner() === $userId) {
+				$foundCards = $this->cardMapper->findAllByBoardId($boardId);
+			} else {
+				$foundCards = $this->cardMapper->findToMe([$boardId], $userId);
+			}
 
 		} else {
+			$ownedBoardIds = [];
+            $sharedBoardIds = [];
+            $allCards = [];
+
 			$userBoards = $this->boardMapper->findAllForUser($userId);
-	
-			$boardOwnerIds = array_filter(array_map(function (Board $board) {
-				return count($board->getAcl()) === 0 ? $board->getId() : null;
-			}, $userBoards));
-	
-			$boardSharedIds = array_filter(array_map(function (Board $board) {
-				return count($board->getAcl()) > 0 ? $board->getId() : null;
-			}, $userBoards));
-	
-			$foundCards = array_merge(
-				// private board: get cards with due date
-				$this->cardMapper->findAllWithDue($boardOwnerIds),
-				// shared board: get all my assigned or unassigned cards
-				$this->cardMapper->findToMeOrNotAssignedCards($boardSharedIds, $userId)
-			);
+			foreach ($userBoards as $board) {
+                if ($board->getOwner() === $userId) {
+                    $ownedBoardIds[] = $board->getId();
+                } else {
+                    $sharedBoardIds[] = $board->getId();
+                }
+            }
+
+			 if (!empty($ownedBoardIds)) {
+                $allCards = array_merge(
+					$allCards, 
+					$this->cardMapper->findAllByBoardsId($ownedBoardIds)
+				);
+            }
+
+			if (!empty($sharedBoardIds)) {
+                $allCards = array_merge(
+					$allCards, 
+					$this->cardMapper->findToMe($sharedBoardIds, $userId)
+				);
+            }
+
+			$foundCards = $allCards;
 		}
 
 		$this->cardService->enrichCards($foundCards);

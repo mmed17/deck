@@ -53,7 +53,7 @@ class StackApiController extends ApiController {
 			}
 			$since = $date->getTimestamp();
 		}
-
+		
 		$userId = $this->userSession->getUID();
 		$stacks = $this->stackService->findAll(
 			$userId,

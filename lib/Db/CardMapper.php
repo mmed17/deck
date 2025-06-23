@@ -154,9 +154,7 @@ class CardMapper extends QBMapper implements IPermissionMapper {
      * @param int $since
      * @return array
      */
-    public function findAssignedToUserInStack(
-		int $stackId, string $userId, $limit = null, $offset = null, int $since = -1
-	): array {
+    public function findAssignedToUserInStack(int $stackId, string $userId, $limit = null, $offset = null, int $since = -1): array {
         $qb = $this->db->getQueryBuilder();
         $qb->select('c.*')
             ->from('deck_cards', 'c')
@@ -260,14 +258,33 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 			->from('deck_cards', 'c')
 			->innerJoin('c', 'deck_stacks', 's', 's.id = c.stack_id')
 			->innerJoin('s', 'deck_boards', 'b', 'b.id = s.board_id')
-			->where($qb->expr()->eq('board_id', $qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
+			->where($qb->expr()->eq('b.id', $qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('c.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
 			->setMaxResults($limit)
 			->setFirstResult($offset)
-			->orderBy('c.lastmodified')
+			->orderBy('c.order')
 			->addOrderBy('c.id');
 		return $this->findEntities($qb);
 	}
+
+	public function findAllByBoardsId(array $boardIds, ?int $limit = null, ?int $offset = null): array {
+        if (empty($boardIds)) {
+            return [];
+        }
+
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('c.*')
+            ->from('deck_cards', 'c')
+            ->innerJoin('c', 'deck_stacks', 's', 's.id = c.stack_id')
+            ->innerJoin('s', 'deck_boards', 'b', 'b.id = s.board_id')
+            ->where($qb->expr()->in('b.id', $qb->createNamedParameter($boardIds, IQueryBuilder::PARAM_INT_ARRAY)))
+            ->andWhere($qb->expr()->eq('c.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
+            ->setMaxResults($limit)
+            ->setFirstResult($offset)
+            ->orderBy('c.order')
+            ->addOrderBy('c.id');
+        return $this->findEntities($qb);
+    }
 
 	public function findAllWithDue(array $boardIds) {
 		$qb = $this->db->getQueryBuilder();
@@ -279,10 +296,25 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 			->andWhere($qb->expr()->isNotNull('c.duedate'))
 			->andWhere($qb->expr()->eq('c.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
 			->andWhere($qb->expr()->isNull('done'))
+			->andWhere($qb->expr()->eq('c.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
+
+		return $this->findEntities($qb);
+	}
+
+	public function findToMe(array $boardIds, string $username) {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('c.*')
+			->from('deck_cards', 'c')
+			->innerJoin('c', 'deck_stacks', 's', 's.id = c.stack_id')
+			->innerJoin('s', 'deck_boards', 'b', 'b.id = s.board_id')
+			->leftJoin('c', 'deck_assigned_users', 'u', 'c.id = u.card_id')
+			->where($qb->expr()->in('s.board_id', $qb->createNamedParameter($boardIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->andWhere($qb->expr()->eq('u.participant', $qb->createNamedParameter($username, IQueryBuilder::PARAM_STR)))
+			->andWhere($qb->expr()->eq('c.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
+			->andWhere($qb->expr()->isNull('done'))
 			->andWhere($qb->expr()->eq('c.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('s.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('b.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
-			->andWhere($qb->expr()->eq('b.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
+			->orderBy('c.last_modified', 'DESC');
+
 		return $this->findEntities($qb);
 	}
 
@@ -301,10 +333,8 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 			// Filter out archived/deleted cards and board
 			->andWhere($qb->expr()->eq('c.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
 			->andWhere($qb->expr()->isNull('done'))
-			->andWhere($qb->expr()->eq('c.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('s.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('b.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
-			->andWhere($qb->expr()->eq('b.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
+			->andWhere($qb->expr()->eq('c.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)));
+
 		return $this->findEntities($qb);
 	}
 
@@ -534,8 +564,6 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 		}
 		return $qb->createNamedParameter($dateTime, IQueryBuilder::PARAM_DATE);
 	}
-
-
 
 	public function searchRaw($boardIds, $term, $limit = null, $offset = null) {
 		$qb = $this->queryCardsByBoards($boardIds)

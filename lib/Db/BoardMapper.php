@@ -127,14 +127,29 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		return array_unique(array_merge($ownerBoards, $sharedBoards));
 	}
 
-	public function findAllForUser(string $userId, ?int $since = null, bool $includeArchived = true, ?int $before = null,
-		?string $term = null): array {
+	public function findAllForUser(
+		string $userId, 
+		?int $since = null, 
+		bool $includeArchived = true, 
+		?int $before = null,
+		?string $term = null
+	): array {
+
 		$useCache = ($since === -1 && $includeArchived === true && $before === null && $term === null);
+
 		if (!isset($this->userBoardCache[$userId]) || !$useCache) {
 			$groups = $this->groupManager->getUserGroupIds(
 				$this->userManager->get($userId)
 			);
-			$userBoards = $this->findAllByUser($userId, null, null, $since, $includeArchived, $before, $term);
+			$userBoards = $this->findAllByUser(
+				$userId, 
+				null,
+				null, 
+				$since, 
+				$includeArchived, 
+				$before, 
+				$term
+			);
 			$groupBoards = $this->findAllByGroups($userId, $groups, null, null, $since, $includeArchived, $before, $term);
 			$circleBoards = $this->findAllByCircles($userId, null, null, $since, $includeArchived, $before, $term);
 			$allBoards = array_values(array_unique(array_merge($userBoards, $groupBoards, $circleBoards)));

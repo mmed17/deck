@@ -88,7 +88,7 @@ class StackService {
 			);
         } else {
             $cards = $this->cardMapper->findAssignedToUserInStack(
-				$stack->getId(), 
+				$stack->getId(),
 				$userId,
 				null,
 				null,
