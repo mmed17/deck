@@ -20,7 +20,7 @@
 
 <script>
 import { NcDashboardWidget } from '@nextcloud/vue'
-import { mapGetters } from 'vuex'
+import { mapGetters, mapState } from 'vuex'
 import Card from '../components/dashboard/Card.vue'
 import { generateUrl } from '@nextcloud/router'
 
@@ -39,6 +39,9 @@ export default {
 		...mapGetters([
 			'assignedCardsDashboard',
 		]),
+		...mapState({
+            selectedBoardId: state => state.dashboard.selectedBoardId
+        }),
 		cards() {
 			const tomorrow = new Date()
 			tomorrow.setDate(tomorrow.getDate() + 1)
@@ -57,12 +60,22 @@ export default {
 			return this.cards.length > 7 ? generateUrl('/apps/deck') : null
 		},
 	},
-	beforeMount() {
-		this.loading = true
-		this.$store.dispatch('loadUpcoming').then(() => {
-			this.loading = false
-		})
+	watch: {
+		selectedBoardId(newValue, oldValue) {
+            this.fetchUpcomingCards();
+		}
 	},
+	beforeMount() {
+		this.fetchUpcomingCards();
+	},
+	methods: {
+		fetchUpcomingCards() {
+			this.loading = true
+			this.$store.dispatch('loadUpcoming').then(() => {
+				this.loading = false
+			})
+        }
+	}
 }
 </script>
 

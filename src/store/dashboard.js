@@ -14,26 +14,31 @@ const apiClient = new OverviewApi()
 export default {
 	state: {
 		assignedCards: [],
+		selectedBoardId: null,
 	},
 	getters: {
 		assignedCardsDashboard: state => {
 			return Object.values(state.assignedCards).flat()
 		},
+		selectedBoardIdDashboard: state => {
+			return state.selectedBoardId;
+		}
 	},
 	mutations: {
 		setAssignedCards(state, assignedCards) {
 			state.assignedCards = assignedCards
 		},
+		setSelectedBoardId(state, boardId) {
+			state.selectedBoardId = boardId;
+		}
 	},
 	actions: {
-		async loadUpcoming({ commit }, payload) {
+		async loadUpcoming({ commit, state }) {
             const params = {};
 
-            if (payload && payload.boardId) {
-                params.boardId = payload.boardId;
+            if (state.selectedBoardId) {
+                params.boardId = state.selectedBoardId;
             }
-			
-			console.log('loadUpcoming', payload);
 
             const upcommingCards = await apiClient.get('upcoming', params)
             commit('setAssignedCards', upcommingCards)

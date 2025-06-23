@@ -39,7 +39,15 @@ const getAsyncImports = async () => {
 	return _imports
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+
+	const { store } = await getAsyncImports()
+	document.addEventListener('projectcreatoraio:project-selected', (event) => {
+        const project = event.detail;
+        const boardId = project ? project.boardId : null;
+        store.commit('setSelectedBoardId', boardId);
+    })
+
 	OCA.Dashboard.register('deckUpcoming', async (el) => {
 		const { Vue, store } = await getAsyncImports()
 		const { default: DashboardUpcoming } = await import('./views/DashboardUpcoming.vue')

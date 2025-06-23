@@ -34,7 +34,7 @@
 <script>
 import PlusIcon from 'vue-material-design-icons/Plus.vue'
 import { NcButton, NcDashboardWidget, NcModal } from '@nextcloud/vue'
-import { mapGetters } from 'vuex'
+import { mapGetters, mapState } from 'vuex'
 import Card from '../components/dashboard/Card.vue'
 import { generateUrl } from '@nextcloud/router'
 import CreateNewCardCustomPicker from './CreateNewCardCustomPicker.vue'
@@ -53,21 +53,16 @@ export default {
 	data() {
 		return {
 			loading: false,
-			showAddCardModal: false,
-			selectedBoardId: null
+			showAddCardModal: false
 		}
-	},
-	created() {
-		document.addEventListener('projectcreatoraio:project-selected', (event) => {
-			const project = event.detail;
-			this.selectedBoardId = project ? project.boardId : null;
-			this.fetchUpcomingCards();
-		});
 	},
 	computed: {
 		...mapGetters([
-			'assignedCardsDashboard'
+			'assignedCardsDashboard',
 		]),
+		...mapState({
+            selectedBoardId: state => state.dashboard.selectedBoardId
+        }),
 		isAdmin() {
 			return !!getCurrentUser()?.isAdmin
 		},
@@ -86,6 +81,11 @@ export default {
 			return this.cards.length > 7 ? generateUrl('/apps/deck') : null
 		},
 	},
+	watch: {
+		selectedBoardId(newValue, oldValue) {
+            this.fetchUpcomingCards();
+		}
+	},
 	beforeMount() {
 		this.fetchUpcomingCards();
 	},
@@ -94,10 +94,8 @@ export default {
 			this.showAddCardModal = !this.showAddCardModal
 		},
 		fetchUpcomingCards() {
-        	console.log('Fetching upcoming cards', this.selectedBoardId);
-            
 			this.loading = true
-			this.$store.dispatch('loadUpcoming', { boardId: this.selectedBoardId }).then(() => {
+			this.$store.dispatch('loadUpcoming').then(() => {
 				this.loading = false
 			})
         }
