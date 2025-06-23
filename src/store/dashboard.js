@@ -26,9 +26,17 @@ export default {
 		},
 	},
 	actions: {
-		async loadUpcoming({ commit }) {
-			const upcommingCards = await apiClient.get('upcoming')
-			commit('setAssignedCards', upcommingCards)
-		},
+		async loadUpcoming({ commit }, payload) {
+            const params = {};
+
+            if (payload && payload.boardId) {
+                params.boardId = payload.boardId;
+            }
+			
+			console.log('loadUpcoming', payload);
+
+            const upcommingCards = await apiClient.get('upcoming', params)
+            commit('setAssignedCards', upcommingCards)
+        },
 	},
 }

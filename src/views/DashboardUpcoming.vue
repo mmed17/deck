@@ -54,11 +54,19 @@ export default {
 		return {
 			loading: false,
 			showAddCardModal: false,
+			selectedBoardId: null
 		}
+	},
+	created() {
+		document.addEventListener('projectcreatoraio:project-selected', (event) => {
+			const project = event.detail;
+			this.selectedBoardId = project ? project.boardId : null;
+			this.fetchUpcomingCards();
+		});
 	},
 	computed: {
 		...mapGetters([
-			'assignedCardsDashboard',
+			'assignedCardsDashboard'
 		]),
 		isAdmin() {
 			return !!getCurrentUser()?.isAdmin
@@ -79,15 +87,20 @@ export default {
 		},
 	},
 	beforeMount() {
-		this.loading = true
-		this.$store.dispatch('loadUpcoming').then(() => {
-			this.loading = false
-		})
+		this.fetchUpcomingCards();
 	},
 	methods: {
 		toggleAddCardModel() {
 			this.showAddCardModal = !this.showAddCardModal
 		},
+		fetchUpcomingCards() {
+        	console.log('Fetching upcoming cards', this.selectedBoardId);
+            
+			this.loading = true
+			this.$store.dispatch('loadUpcoming', { boardId: this.selectedBoardId }).then(() => {
+				this.loading = false
+			})
+        }
 	},
 }
 </script>

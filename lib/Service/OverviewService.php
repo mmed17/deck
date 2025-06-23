@@ -48,7 +48,9 @@ class OverviewService {
 		$this->attachmentService = $attachmentService;
 	}
 
-	public function findUpcomingCards(string $userId): array {
+	public function findUpcomingCards(string $userId, $boardId = null): array {
+		error_log('Fetching ...' . $userId .'_' . $boardId .'');
+		
 		$userBoards = $this->boardMapper->findAllForUser($userId);
 
 		$boardOwnerIds = array_filter(array_map(function (Board $board) {

@@ -12,8 +12,9 @@ export class OverviewApi {
 		return generateOcsUrl(`apps/deck/api/v1.0/${url}`)
 	}
 
-	get(filter) {
+	get(filter, params) {
 		return axios.get(this.url(`overview/${filter}`), {
+			params,
 			headers: { 'OCS-APIRequest': 'true' },
 		})
 			.then(
