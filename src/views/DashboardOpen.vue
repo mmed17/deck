@@ -43,7 +43,7 @@ export default {
 			const list = [
 				...this.assignedCardsDashboard,
 			].filter((card) => {
-				return !card.done && !card.duedate;
+				return !card.duedate;
 			});
 			list.sort((a, b) => {
 				return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()

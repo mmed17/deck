@@ -64,12 +64,10 @@ export default {
 			return !!getCurrentUser()?.isAdmin
 		},
 		cards() {
-			console.log('assignedCardsDashboard', this.assignedCardsDashboard);
-
 			const list = [
 				...this.assignedCardsDashboard,
 			].filter((card) => {
-				return !card.done && new Date(card.duedate) > new Date();
+				return card.duedate && new Date(card.duedate) > new Date();
 			})
 			list.sort((a, b) => {
 				return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()
