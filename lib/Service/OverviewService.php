@@ -17,6 +17,8 @@ use OCA\Deck\Db\LabelMapper;
 use OCA\Deck\Model\CardDetails;
 use OCP\Comments\ICommentsManager;
 use OCP\IUserManager;
+use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\Security\Exceptions\ForbiddenException;
 
 class OverviewService {
 	private CardService $cardService;
@@ -37,6 +39,7 @@ class OverviewService {
 		IUserManager $userManager,
 		ICommentsManager $commentsManager,
 		AttachmentService $attachmentService,
+		BoardService $boardService
 	) {
 		$this->cardService = $cardService;
 		$this->boardMapper = $boardMapper;
@@ -46,27 +49,44 @@ class OverviewService {
 		$this->userManager = $userManager;
 		$this->commentsManager = $commentsManager;
 		$this->attachmentService = $attachmentService;
+		$this->boardService = $boardService;
 	}
 
-	public function findUpcomingCards(string $userId, $boardId = null): array {
-		error_log('Fetching ...' . $userId .'_' . $boardId .'');
-		
-		$userBoards = $this->boardMapper->findAllForUser($userId);
+	public function findUpcomingCards(string $userId, int $boardId = null): array {
 
-		$boardOwnerIds = array_filter(array_map(function (Board $board) {
-			return count($board->getAcl()) === 0 ? $board->getId() : null;
-		}, $userBoards));
+		$foundCards = [];
 
-		$boardSharedIds = array_filter(array_map(function (Board $board) {
-			return count($board->getAcl()) > 0 ? $board->getId() : null;
-		}, $userBoards));
+		if($boardId !== null) {
+			try {
+                $board = $this->boardService->find($boardId);
+            } catch (DoesNotExistException | ForbiddenException $e) {
+                return [];
+            }
 
-		$foundCards = array_merge(
-			// private board: get cards with due date
-			$this->cardMapper->findAllWithDue($boardOwnerIds),
-			// shared board: get all my assigned or unassigned cards
-			$this->cardMapper->findToMeOrNotAssignedCards($boardSharedIds, $userId)
-		);
+			if (count($board->getAcl()) > 0) {
+                $foundCards = $this->cardMapper->findToMeOrNotAssignedCards([$boardId], $userId);
+            } else {
+                $foundCards = $this->cardMapper->findAllWithDue([$boardId]);
+            }
+
+		} else {
+			$userBoards = $this->boardMapper->findAllForUser($userId);
+	
+			$boardOwnerIds = array_filter(array_map(function (Board $board) {
+				return count($board->getAcl()) === 0 ? $board->getId() : null;
+			}, $userBoards));
+	
+			$boardSharedIds = array_filter(array_map(function (Board $board) {
+				return count($board->getAcl()) > 0 ? $board->getId() : null;
+			}, $userBoards));
+	
+			$foundCards = array_merge(
+				// private board: get cards with due date
+				$this->cardMapper->findAllWithDue($boardOwnerIds),
+				// shared board: get all my assigned or unassigned cards
+				$this->cardMapper->findToMeOrNotAssignedCards($boardSharedIds, $userId)
+			);
+		}
 
 		$this->cardService->enrichCards($foundCards);
 		$overview = [];
