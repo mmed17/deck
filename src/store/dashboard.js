@@ -34,7 +34,7 @@ export default {
 	},
 	actions: {
 		async loadUpcoming({ commit, state }) {
-            const params = {};
+            const params = {done: false};
 
             if (state.selectedBoardId) {
                 params.boardId = state.selectedBoardId;

@@ -52,7 +52,7 @@ class OverviewService {
 		$this->boardService = $boardService;
 	}
 
-	public function findUpcomingCards(string $userId, int $boardId = null): array {
+	public function findUpcomingCards(string $userId, int $boardId = null, bool $done = true): array {
 
 		$foundCards = [];
 
@@ -64,9 +64,13 @@ class OverviewService {
             }
 
 			if ($board->getOwner() === $userId) {
-				$foundCards = $this->cardMapper->findAllByBoardId($boardId);
+				$foundCards = $this->cardMapper->findAllByBoardId(
+					$boardId, null, null, $done
+				);
 			} else {
-				$foundCards = $this->cardMapper->findToMe([$boardId], $userId);
+				$foundCards = $this->cardMapper->findToMe(
+					[$boardId], $userId, $done
+				);
 			}
 
 		} else {
@@ -86,14 +90,18 @@ class OverviewService {
 			 if (!empty($ownedBoardIds)) {
                 $allCards = array_merge(
 					$allCards, 
-					$this->cardMapper->findAllByBoardsId($ownedBoardIds)
+					$this->cardMapper->findAllByBoardsId(
+						$ownedBoardIds, null, null, $done
+					)
 				);
             }
 
 			if (!empty($sharedBoardIds)) {
                 $allCards = array_merge(
 					$allCards, 
-					$this->cardMapper->findToMe($sharedBoardIds, $userId)
+					$this->cardMapper->findToMe(
+						$sharedBoardIds, $userId, $done
+					)
 				);
             }
 

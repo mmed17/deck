@@ -252,7 +252,7 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 		return $this->findEntities($qb);
 	}
 
-	public function findAllByBoardId(int $boardId, ?int $limit = null, ?int $offset = null): array {
+	public function findAllByBoardId(int $boardId, ?int $limit = null, ?int $offset = null, bool $done = true): array {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('c.*')
 			->from('deck_cards', 'c')
@@ -264,10 +264,15 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 			->setFirstResult($offset)
 			->orderBy('c.order')
 			->addOrderBy('c.id');
+
+		if(!$done) {
+			$qb->andWhere($qb->expr()->isNull('done'));
+		}
+
 		return $this->findEntities($qb);
 	}
 
-	public function findAllByBoardsId(array $boardIds, ?int $limit = null, ?int $offset = null): array {
+	public function findAllByBoardsId(array $boardIds, ?int $limit = null, ?int $offset = null, bool $done): array {
         if (empty($boardIds)) {
             return [];
         }
@@ -283,6 +288,11 @@ class CardMapper extends QBMapper implements IPermissionMapper {
             ->setFirstResult($offset)
             ->orderBy('c.order')
             ->addOrderBy('c.id');
+		
+		if(!$done) {
+			$qb->andWhere($qb->expr()->isNull('c.done'));
+		}
+		
         return $this->findEntities($qb);
     }
 
@@ -301,7 +311,7 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 		return $this->findEntities($qb);
 	}
 
-	public function findToMe(array $boardIds, string $username) {
+	public function findToMe(array $boardIds, string $username, bool $done = true) {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('c.*')
 			->from('deck_cards', 'c')
@@ -311,9 +321,12 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 			->where($qb->expr()->in('s.board_id', $qb->createNamedParameter($boardIds, IQueryBuilder::PARAM_INT_ARRAY)))
 			->andWhere($qb->expr()->eq('u.participant', $qb->createNamedParameter($username, IQueryBuilder::PARAM_STR)))
 			->andWhere($qb->expr()->eq('c.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
-			->andWhere($qb->expr()->isNull('done'))
 			->andWhere($qb->expr()->eq('c.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
 			->orderBy('c.last_modified', 'DESC');
+
+		if(!$done) {
+			$qb->andWhere($qb->expr()->isNull('c.done'));
+		}
 
 		return $this->findEntities($qb);
 	}
