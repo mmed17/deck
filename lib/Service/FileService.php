@@ -122,18 +122,7 @@ class FileService implements IAttachmentService {
 		$file = $this->getUploadedFile();
 		$fileName = $file['name'];
 
-		if($path !== null) {
-			$userFolder = $this->rootFolder->getUserFolder($attachment->getCreatedBy());
-
-			if(!$userFolder->nodeExists($path)) {
-				$folder = $this->createFolderRecursive($userFolder, $path);
-			} else {
-				$folder = $userFolder->get($path);
-			}
-
-		} else {
-			$folder = $this->getFolder($attachment);
-		}
+		$folder = $this->getFolder($attachment);
 		
 		if ($folder->fileExists($fileName)) {
 			$attachment = $this->attachmentMapper->findByData(
@@ -154,43 +143,8 @@ class FileService implements IAttachmentService {
 			fclose($content);
 		}
 		
-		if ($path !== null) {
-            $attachment->setData($target->getPath());
-        } else {
-            $attachment->setData($fileName);
-        }
+		$attachment->setData($fileName);
 	}
-
-	/**
-     * Creates a folder path recursively within a user's files.
-     *
-     * @param Folder $baseFolder The user's root folder to start from.
-     * @param string $path The relative path to create (e.g., "A/B/C").
-     * @return Folder The final created folder node.
-     * @throws \OCP\Files\NotPermittedException
-     * @throws \OCP\Files\InvalidPathException
-     */
-    private function createFolderRecursive(Folder $baseFolder, string $path): Folder {
-        $parts = explode('/', trim($path, '/'));
-        $currentFolder = $baseFolder;
-
-        foreach ($parts as $part) {
-            if (empty($part)) {
-                continue;
-            }
-            if (!$currentFolder->nodeExists($part)) {
-                $currentFolder = $currentFolder->newFolder($part);
-            } else {
-                $node = $currentFolder->get($part);
-                if (!$node instanceof Folder) {
-                    // A file exists with the same name as a desired subfolder.
-                    throw new \OCP\Files\InvalidPathException("A file exists where a folder was expected: " . $node->getPath());
-                }
-                $currentFolder = $node;
-            }
-        }
-        return $currentFolder;
-    }
 
 	/**
 	 * This method requires to be used with POST so we can properly get the form data
