@@ -177,7 +177,7 @@ class AttachmentService {
 	 * @throws StatusException
 	 * @throws BadRequestException
 	 */
-	public function create($cardId, $type, $data) {
+	public function create($cardId, $type, $data, string $path = null) {
 		$this->attachmentServiceValidator->check(compact('cardId', 'type'));
 
 		$this->permissionService->checkPermission($this->cardMapper, $cardId, Acl::PERMISSION_EDIT);
@@ -190,10 +190,10 @@ class AttachmentService {
 		$attachment->setCreatedBy($this->userId);
 		$attachment->setLastModified(time());
 		$attachment->setCreatedAt(time());
-
+		
 		try {
 			$service = $this->getService($attachment->getType());
-			$service->create($attachment);
+			$service->create($attachment, $path);
 
 			if (!$service instanceof ICustomAttachmentService) {
 				if ($attachment->getData() === null) {

@@ -39,4 +39,19 @@ class ProjectMapper extends DeckMapper {
             return null;
         }
     }
+
+    public function findByCardId(int $cardId): ?Project {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('p.*')
+            ->from($this->getTableName(), 'p')
+            ->innerJoin('p', 'deck_stacks', 's', 'p.board_id = s.board_id')
+            ->innerJoin('s', 'deck_cards', 'c', 's.id = c.stack_id')
+            ->where($qb->expr()->eq('c.id', $qb->createNamedParameter($cardId, IQueryBuilder::PARAM_INT)));
+
+        try {
+            return $this->findEntity($qb);
+        } catch (DoesNotExistException $e) {
+            return null;
+        }
+    }
 }

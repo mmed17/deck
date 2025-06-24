@@ -45,7 +45,7 @@ interface IAttachmentService {
 	 *
 	 * @param Attachment $attachment
 	 */
-	public function create(Attachment $attachment);
+	public function create(Attachment $attachment, ?string $path);
 
 	/**
 	 * Update an attachment with custom data

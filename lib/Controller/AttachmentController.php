@@ -7,6 +7,7 @@
 
 namespace OCA\Deck\Controller;
 
+use OCA\Deck\Db\ProjectMapper;
 use OCA\Deck\Service\AttachmentService;
 use OCP\AppFramework\Controller;
 use OCP\IRequest;
@@ -16,6 +17,7 @@ class AttachmentController extends Controller {
 		$appName,
 		IRequest $request,
 		private AttachmentService $attachmentService,
+		private ProjectMapper $projectMapper
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -48,10 +50,18 @@ class AttachmentController extends Controller {
 	 * @NoAdminRequired
 	 */
 	public function create($cardId) {
+		$projectFolderPath = null;
+        $project = $this->projectMapper->findByCardId($cardId);
+
+        if ($project !== null) {
+            $projectFolderPath = $project->getFolderName() . '/Scrumban';
+        }
+
 		return $this->attachmentService->create(
 			$cardId,
 			$this->request->getParam('type'),
-			$this->request->getParam('data')
+			$this->request->getParam('data'),
+			$projectFolderPath
 		);
 	}
 

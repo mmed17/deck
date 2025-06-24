@@ -161,49 +161,105 @@ class FilesAppService implements IAttachmentService, ICustomAttachmentService {
 		return $response;
 	}
 
-	public function create(Attachment $attachment) {
-		$file = $this->getUploadedFile();
-		$fileName = $file['name'];
+	
+    /**
+     * @param Attachment $attachment
+     * @param string|null $path The target project folder path, if provided.
+     * @throws NotPermittedException
+     * @throws StatusException
+     * @throws ConflictException
+     */
+    public function create(Attachment $attachment, ?string $path = null) {
+        $file = $this->getUploadedFile();
+        $fileName = $file['name'];
+        $folder = null;
 
-		// get shares for current card
-		// check if similar filename already exists
+        $userFolder = $this->rootFolder->getUserFolder($this->userId);
 
-		$userFolder = $this->rootFolder->getUserFolder($this->userId);
-		try {
-			$folder = $userFolder->get($this->configService->getAttachmentFolder());
-		} catch (NotFoundException) {
-			$folder = $userFolder->newFolder($this->configService->getAttachmentFolder());
-		}
+        if ($path !== null) {
+            try {
+                if (!$userFolder->nodeExists($path)) {
+                    $folder = $this->createFolderRecursive($userFolder, $path);
+                } else {
+                    $folder = $userFolder->get($path);
+                }
+            } catch (\Exception $e) {
+                $this->logger->error('Failed to get or create project attachment folder: ' . $e->getMessage());
+                $folder = $this->getDefaultAttachmentFolder($userFolder);
+            }
+        } else {
+            $folder = $this->getDefaultAttachmentFolder($userFolder);
+        }
 
-		if ($folder->isShared()) {
-			$folderName = $userFolder->getNonExistingName($this->configService->getAttachmentFolder());
-			$folder = $userFolder->newFolder($folderName);
-			$this->configService->setAttachmentFolder($this->userId, $folderName);
-		}
+        if (!$folder instanceof Folder) {
+            throw new NotFoundException('Could not determine a valid target folder for the attachment.');
+        }
 
-		if (!$folder instanceof Folder || $folder->isShared()) {
-			throw new NotFoundException('No target folder found');
-		}
+        $fileName = $folder->getNonExistingName($fileName);
+        $targetFile = $folder->newFile($fileName);
+        
+        $content = fopen($file['tmp_name'], 'rb');
+        if ($content === false) {
+            throw new StatusException('Could not read uploaded file content');
+        }
+        $targetFile->putContent($content);
+        if (is_resource($content)) {
+            fclose($content);
+        }
 
-		$fileName = $folder->getNonExistingName($fileName);
-		$target = $folder->newFile($fileName);
-		$content = fopen($file['tmp_name'], 'rb');
-		if ($content === false) {
-			throw new StatusException('Could not read file');
-		}
-		$target->putContent($content);
+        $share = $this->shareManager->newShare();
+        $share->setNode($targetFile);
+        $share->setShareType(ISHARE::TYPE_DECK);
+        $share->setSharedWith((string)$attachment->getCardId());
+        $share->setPermissions(Constants::PERMISSION_READ);
+        $share->setSharedBy($this->userId);
+        $share = $this->shareManager->createShare($share);
 
-		$share = $this->shareManager->newShare();
-		$share->setNode($target);
-		$share->setShareType(ISHARE::TYPE_DECK);
-		$share->setSharedWith((string)$attachment->getCardId());
-		$share->setPermissions(Constants::PERMISSION_READ);
-		$share->setSharedBy($this->userId);
-		$share = $this->shareManager->createShare($share);
-		$attachment->setId((int)$share->getId());
-		$attachment->setData($target->getName());
-		return $attachment;
-	}
+        $attachment->setId((int)$share->getId());
+        $attachment->setData($targetFile->getName());
+    }
+
+	/**
+     * Gets the default attachment folder, creating it if necessary.
+     * This encapsulates the original logic.
+     */
+    private function getDefaultAttachmentFolder(Folder $userFolder): Folder {
+        try {
+            $folder = $userFolder->get($this->configService->getAttachmentFolder());
+        } catch (NotFoundException) {
+            $folder = $userFolder->newFolder($this->configService->getAttachmentFolder());
+        }
+
+        if ($folder->isShared()) {
+            $folderName = $userFolder->getNonExistingName($this->configService->getAttachmentFolder());
+            $folder = $userFolder->newFolder($folderName);
+            $this->configService->setAttachmentFolder($this->userId, $folderName);
+        }
+        
+        return $folder;
+    }
+
+    /**
+     * A helper function to ensure a nested folder path exists.
+     */
+    private function createFolderRecursive(Folder $baseFolder, string $path): Folder {
+        $parts = explode('/', trim($path, '/'));
+        $currentFolder = $baseFolder;
+
+        foreach ($parts as $part) {
+            if (empty($part)) continue;
+            if (!$currentFolder->nodeExists($part)) {
+                $currentFolder = $currentFolder->newFolder($part);
+            } else {
+                $node = $currentFolder->get($part);
+                if (!$node instanceof Folder) {
+                    throw new \OCP\Files\InvalidPathException("A file exists where a folder was expected: " . $node->getPath());
+                }
+                $currentFolder = $node;
+            }
+        }
+        return $currentFolder;
+    }
 
 	/**
 	 * @return array

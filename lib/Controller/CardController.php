@@ -67,7 +67,7 @@ class CardController extends Controller {
 		foreach ($labels as $label) {
 			$this->assignLabel($card->id, $label);
 		}
-
+		
 		foreach ($users as $user) {
 			$this->assignmentService->assignUser($card->id, $user['id'], $user['type']);
 		}

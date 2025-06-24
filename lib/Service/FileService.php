@@ -23,6 +23,7 @@ use OCP\IConfig;
 use OCP\IL10N;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
+use OCP\Files\Folder;
 
 class FileService implements IAttachmentService {
 
@@ -35,8 +36,7 @@ class FileService implements IAttachmentService {
 		private IConfig $config,
 		private AttachmentMapper $attachmentMapper,
 		private IMimeTypeDetector $mimeTypeDetector,
-	) {
-	}
+	) {}
 
 	/**
 	 * @param Attachment $attachment
@@ -55,7 +55,7 @@ class FileService implements IAttachmentService {
 	 * @throws NotPermittedException
 	 */
 	public function getFolder(Attachment $attachment) {
-		$folderName = 'file-card-' . (int)$attachment->getCardId();
+		$folderName = 'file-card-' . (int) $attachment->getCardId();
 		try {
 			$folder = $this->appData->getFolder($folderName);
 		} catch (NotFoundException $e) {
@@ -118,12 +118,28 @@ class FileService implements IAttachmentService {
 	 * @throws StatusException
 	 * @throws ConflictException
 	 */
-	public function create(Attachment $attachment) {
+	public function create(Attachment $attachment, string $path = null) {
 		$file = $this->getUploadedFile();
-		$folder = $this->getFolder($attachment);
 		$fileName = $file['name'];
+
+		if($path !== null) {
+			$userFolder = $this->rootFolder->getUserFolder($attachment->getCreatedBy());
+
+			if(!$userFolder->nodeExists($path)) {
+				$folder = $this->createFolderRecursive($userFolder, $path);
+			} else {
+				$folder = $userFolder->get($path);
+			}
+
+		} else {
+			$folder = $this->getFolder($attachment);
+		}
+		
 		if ($folder->fileExists($fileName)) {
-			$attachment = $this->attachmentMapper->findByData($attachment->getCardId(), $fileName);
+			$attachment = $this->attachmentMapper->findByData(
+				$attachment->getCardId(), 
+				$fileName
+			);
 			throw new ConflictException('File already exists.', $attachment);
 		}
 
@@ -132,13 +148,49 @@ class FileService implements IAttachmentService {
 		if ($content === false) {
 			throw new StatusException('Could not read file');
 		}
+
 		$target->putContent($content);
 		if (is_resource($content)) {
 			fclose($content);
 		}
-
-		$attachment->setData($fileName);
+		
+		if ($path !== null) {
+            $attachment->setData($target->getPath());
+        } else {
+            $attachment->setData($fileName);
+        }
 	}
+
+	/**
+     * Creates a folder path recursively within a user's files.
+     *
+     * @param Folder $baseFolder The user's root folder to start from.
+     * @param string $path The relative path to create (e.g., "A/B/C").
+     * @return Folder The final created folder node.
+     * @throws \OCP\Files\NotPermittedException
+     * @throws \OCP\Files\InvalidPathException
+     */
+    private function createFolderRecursive(Folder $baseFolder, string $path): Folder {
+        $parts = explode('/', trim($path, '/'));
+        $currentFolder = $baseFolder;
+
+        foreach ($parts as $part) {
+            if (empty($part)) {
+                continue;
+            }
+            if (!$currentFolder->nodeExists($part)) {
+                $currentFolder = $currentFolder->newFolder($part);
+            } else {
+                $node = $currentFolder->get($part);
+                if (!$node instanceof Folder) {
+                    // A file exists with the same name as a desired subfolder.
+                    throw new \OCP\Files\InvalidPathException("A file exists where a folder was expected: " . $node->getPath());
+                }
+                $currentFolder = $node;
+            }
+        }
+        return $currentFolder;
+    }
 
 	/**
 	 * This method requires to be used with POST so we can properly get the form data
