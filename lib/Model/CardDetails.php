@@ -9,7 +9,7 @@ namespace OCA\Deck\Model;
 use OCA\Deck\Db\Board;
 use OCA\Deck\Db\Card;
 use OCP\Collaboration\Reference\Reference;
-use OCA\Deck\Db\Project;
+use OCA\ProjectCreatorAIO\Db\Project;
 
 class CardDetails extends Card {
 	private Card $card;

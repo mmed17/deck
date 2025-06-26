@@ -63,8 +63,7 @@ class CardService {
 		private IReferenceManager $referenceManager,
 		private ?string $userId,
 		private ProjectMapper $projectMapper
-	) {
-	}
+	) {}
 
 	public function enrichCards($cards) {
 		$user = $this->userManager->get($this->userId);

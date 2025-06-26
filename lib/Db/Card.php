@@ -12,7 +12,7 @@ namespace OCA\Deck\Db;
 use DateTime;
 use DateTimeZone;
 use Sabre\VObject\Component\VCalendar;
-use OCA\Deck\Db\Project;
+use OCA\ProjectCreatorAIO\Db\Project;
 
 /**
  * @method string getTitle()
