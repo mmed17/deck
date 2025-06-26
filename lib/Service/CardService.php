@@ -19,7 +19,6 @@ use OCA\Deck\Db\CardMapper;
 use OCA\Deck\Db\ChangeHelper;
 use OCA\Deck\Db\Label;
 use OCA\Deck\Db\LabelMapper;
-use OCA\Deck\Db\ProjectMapper;
 use OCA\Deck\Db\StackMapper;
 use OCA\Deck\Event\CardCreatedEvent;
 use OCA\Deck\Event\CardDeletedEvent;
@@ -37,6 +36,7 @@ use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
+use OCA\ProjectCreatorAIO\Db\ProjectMapper;
 
 class CardService {
 	public function __construct(
