@@ -42,7 +42,7 @@ export default {
 	computed: {
 		cardLink() {
 			return generateUrl('/apps/deck') + `/board/${this.card.boardId}/card/${this.card.id}`
-		},
+		}
 	},
 	methods: {
 		redirect() {
