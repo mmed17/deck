@@ -41,7 +41,7 @@ export default {
 	},
 	computed: {
 		cardLink() {
-			return generateUrl('/apps/deck') + `#/board/${this.card.boardId}/card/${this.card.id}`
+			return generateUrl('/apps/deck') + `/board/${this.card.boardId}/card/${this.card.id}`
 		},
 	},
 	methods: {
