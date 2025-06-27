@@ -173,7 +173,7 @@ class FilesAppService implements IAttachmentService, ICustomAttachmentService {
         $file = $this->getUploadedFile();
         $fileName = $file['name'];
         $folder = null;
-
+		
         $userFolder = $this->rootFolder->getUserFolder($this->userId);
 
         if ($path !== null) {

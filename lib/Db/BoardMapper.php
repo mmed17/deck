@@ -177,7 +177,7 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		}
 		return $this->userBoardCache[$userId];
 	}
-
+	
 	/**
 	 * Find all boards for a given user
 	 */

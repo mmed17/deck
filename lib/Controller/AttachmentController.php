@@ -52,9 +52,9 @@ class AttachmentController extends Controller {
 	public function create($cardId) {
 		$projectFolderPath = null;
         $project = $this->projectMapper->findByCardId($cardId);
-
+		
         if ($project !== null) {
-            $projectFolderPath = $project->getFolderName() . '/Scrumban';
+            $projectFolderPath = $project->getFolderPath() . '/Scrumban';
         }
 
 		return $this->attachmentService->create(

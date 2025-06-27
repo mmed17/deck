@@ -100,7 +100,9 @@ class OverviewService {
                 $allCards = array_merge(
 					$allCards, 
 					$this->cardMapper->findToMe(
-						$sharedBoardIds, $userId, $done
+						$sharedBoardIds, 
+						$userId, 
+						$done
 					)
 				);
             }

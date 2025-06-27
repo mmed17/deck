@@ -28,6 +28,10 @@ class OverviewApiController extends OCSController {
 	 * @NoAdminRequired
 	 */
 	public function upcomingCards(int $boardId = null, bool $done = true): DataResponse {
-		return new DataResponse($this->dashboardService->findUpcomingCards($this->userId, $boardId, $done));
+		return new DataResponse($this->dashboardService->findUpcomingCards(
+			$this->userId, 
+			$boardId, 
+			$done
+		));
 	}
 }

@@ -37,6 +37,7 @@ use OCP\IURLGenerator;
 use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
 use OCA\ProjectCreatorAIO\Db\ProjectMapper;
+use OCA\ProjectCreatorAIO\Db\Project;
 
 class CardService {
 	public function __construct(
@@ -61,8 +62,8 @@ class CardService {
 		private CardServiceValidator $cardServiceValidator,
 		private AssignmentService $assignmentService,
 		private IReferenceManager $referenceManager,
+		private ProjectMapper $projectMapper,
 		private ?string $userId,
-		private ProjectMapper $projectMapper
 	) {}
 
 	public function enrichCards($cards) {
@@ -86,12 +87,11 @@ class CardService {
 			$board = $this->boardService->find($stack->getBoardId(), false);
 			$card->setRelatedStack($stack);
 			$card->setRelatedBoard($board);
-
+			
 			$project = $this->projectMapper->findByBoardId($board->getId());
 			if ($project !== null) {
 				$card->setProject($project);
 			}
-
 			return $card->getId();
 		}, $cards);
 
