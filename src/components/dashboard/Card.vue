@@ -41,17 +41,13 @@ export default {
 	},
 	computed: {
 		cardLink() {
-			if(this.redirectToProject && this.card.project) {
-				return generateUrl('/apps/contacts/circle') + `/${this.card.project.circleId}`;
-			} else {
-				return generateUrl('/apps/deck') + `#/board/${this.card.boardId}/card/${this.card.id}`
-			}
+			return generateUrl('/apps/deck') + `#/board/${this.card.boardId}/card/${this.card.id}`
 		},
 	},
 	methods: {
 		redirect() {
 			const url = this.cardLink;
-			document.location.href = url;
+			window.open(url);
 		}
 	}
 }
