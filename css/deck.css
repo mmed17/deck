@@ -22,11 +22,12 @@ input[type=text]:hover+input[type=submit].icon-confirm {
 	border-color: var(--color-main-text) !important;
 }
 aside#card-notes {
-	position: fixed;
-	z-index: 15000;
-	right: 0;
-	top: 0;
-	left: auto;
-	padding: 25px;
-	box-shadow: -5px 0px 15px rgba(0, 0, 0, 0.2);
+    position: fixed;
+    right: 0;
+    top: 50px;
+	height: calc(100vh - 50px);
+    left: auto;
+    padding: 25px;
+    box-shadow: -5px 0px 15px rgba(0, 0, 0, 0.2);
+	border-top-left-radius: 2rem;
 }

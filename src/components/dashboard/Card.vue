@@ -31,16 +31,40 @@
 		<NcAppSidebar
 			id="card-notes"
 			ref="sidebar" 
-			name="Card details"
+			:name="'Card N° ' + card.id "
 			:open="showSidebar"
 			v-click-outside="closeSidebar"
 			@close="closeSidebar">
-			
+
 			<NcAppSidebarTab name="Comments" id="comments-tab">
 				<template #icon><Comment :size="20" /></template>
-				Single tab content
+				<div class="tab-content">
+					<ul class="comments-feed">
+						<CommentItem v-for="comment in comments"
+							:key="comment.id"
+							:comment="comment" />
+
+						<InfiniteLoading :identifier="card.id" @infinite="commentsInfiniteHandler">
+							<div slot="spinner">
+								<NcLoadingIcon :size="20" />
+							</div>
+							<div slot="no-more" />
+							<div slot="no-results" />
+						</InfiniteLoading>
+					</ul>
+
+					<NcEmptyContent 
+						v-if="!commentsLoading && comments.length === 0"
+						:name="error ? error : t('deck', 'No comments yet.')">
+						<template #icon>
+							<Comment />
+						</template>
+					</NcEmptyContent>
+                </div>
 			</NcAppSidebarTab>
 
+			<!-- show card notes using the API and add lazy loading option -->
+			<!-- http://localhost:8080/ocs/v2.php/apps/deck/api/v1.0/cards/21/notes?limit=10&offset=0 -->
 			<NcAppSidebarTab name="Notes" id="notes-tab">
 				<template #icon><NoteTextOutline :size="20" /></template>
 				Second tab content
@@ -50,15 +74,22 @@
 </template>
 
 <script>
-import DueDate from '../cards/badges/DueDate.vue'
-import { generateUrl } from '@nextcloud/router'
-import labelStyle from '../../mixins/labelStyle.js'
+import DueDate from '../cards/badges/DueDate.vue';
+import { generateOcsUrl, generateUrl } from '@nextcloud/router';
+import labelStyle from '../../mixins/labelStyle.js';
 import { NcButton } from "@nextcloud/vue";
-import Comment from 'vue-material-design-icons/Comment.vue';
+import Comment from 'vue-material-design-icons/CommentOutline.vue';
 import NoteTextOutline from 'vue-material-design-icons/NoteTextOutline.vue';
 import NcAppSidebarTab from '@nextcloud/vue/components/NcAppSidebarTab';
 import NcAppSidebar from '@nextcloud/vue/components/NcAppSidebar';
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon';
+import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent';
 import ClickOutside from 'vue-click-outside';
+import CommentItem from '../card/CommentItem.vue';
+import InfiniteLoading from 'vue-infinite-loading';
+import ocs from '@nextcloud/axios';
+
+const API_LIMIT = 10;
 
 export default {
 	name: 'Card',
@@ -69,6 +100,10 @@ export default {
 		NcButton,
 		NcAppSidebarTab,
 		NcAppSidebar,
+		NcLoadingIcon,
+		NcEmptyContent,
+		CommentItem,
+		InfiniteLoading
 	},
 	directives: {
 		ClickOutside
@@ -86,35 +121,79 @@ export default {
 	},
 	data() {
 		return {
-			showSidebar: false
+			showSidebar: false,
+			comments: [],
+            notes: [],
+            commentsLoading: false,
+            notesLoading: false,
+            commentsOffset: 0,
+            notesOffset: 0,
+            canLoadMoreComments: true,
+            canLoadMoreNotes: true,
 		}
 	},
-	watch: {
-        showSidebar(newValue) {
-            if (newValue) {
-                this.$nextTick(() => {
-                    const sidebarEl = this.$refs.sidebar.$el;
-                    document.body.appendChild(sidebarEl);
-                });
-            }
-        }
-    },
 	computed: {
 		cardLink() {
 			return generateUrl('/apps/deck') + `/board/${this.card.boardId}/card/${this.card.id}`
-		}
+		},
+		commentsUrl() {
+			return `/apps/deck/api/v1.0/cards/${this.card.id}/comments`;
+		},
 	},
 	methods: {
 		redirect() {
 			const url = this.cardLink;
 			window.open(url);
 		},
-		openSidebar(event) {
-            this.showSidebar = true;
+		openSidebar() {
+			this.commentsInfiniteHandler();
+			this.showSidebar = true;
         },
         closeSidebar() {
             this.showSidebar = false;
-        }
+			this.comments = [];
+			this.commentsOffset = 0;
+			this.canLoadMoreComments = true;
+			this.error = null;
+        },
+		async commentsInfiniteHandler($state) {
+            if (!this.canLoadMoreComments && $state) {
+                $state.complete();
+                return;
+            }
+
+            this.commentsLoading = true;
+            try {
+				const url = generateOcsUrl(this.commentsUrl);
+				const response = await ocs.get(url, {
+					params: {
+						limit: API_LIMIT,
+						offset: this.commentsOffset
+					}
+				});
+				const comments = response.data.ocs.data;
+				if (comments.length) {
+                    this.comments.push(...comments);
+                    this.commentsOffset += comments.length;
+					if($state) {
+						$state.loaded();
+					}
+                } else {
+                    this.canLoadMoreComments = false;
+					if($state) {
+						$state.complete();
+					}
+                }
+            } catch (e) {
+                console.error('Failed to fetch comments', e);
+                this.error = 'Failed to load comments';
+				if($state) {
+					$state.error();
+				}
+            } finally {
+                this.commentsLoading = false;
+            }
+        },
 	}
 }
 </script>
@@ -159,5 +238,9 @@ export default {
 
 	.comment-section {
 		margin-left: auto;
+	}
+
+	.comments-feed {
+		list-style: none;
 	}
 </style>

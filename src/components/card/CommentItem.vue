@@ -30,7 +30,7 @@
 			<span class="username">
 				{{ comment.actorDisplayName }}
 			</span>
-			<NcActions v-show="!edit" :force-menu="true">
+			<NcActions v-show="!edit && showExtraOptions" :force-menu="true">
 				<NcActionButton :close-after-click="true" @click="replyTo()">
 					<template #icon>
 						<ReplyIcon decorative />
@@ -123,6 +123,10 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+		showExtraOptions: {
+			type: Boolean,
+			default: false
+		}
 	},
 	data() {
 		return {
