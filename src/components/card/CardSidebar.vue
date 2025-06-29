@@ -58,10 +58,19 @@
 			</template>
 			<CardSidebarTabComments :card="currentCard" :tab-query="tabQuery" />
 		</NcAppSidebarTab>
+		
+		<NcAppSidebarTab id="notes"
+			:order="3"
+			:name="t('deck', 'Notes')">
+			<template #icon>
+				<NoteTextOutline :size="20" />
+			</template>
+			<CardSidebarTabNotes :card="currentCard" :tab-query="tabQuery" />
+		</NcAppSidebarTab>
 
 		<NcAppSidebarTab v-if="hasActivity"
 			id="timeline"
-			:order="3"
+			:order="4"
 			:name="t('deck', 'Activity')">
 			<template #icon>
 				<ActivityIcon :size="20" />
@@ -90,6 +99,8 @@ import ActivityIcon from 'vue-material-design-icons/LightningBolt.vue'
 import { showError } from '@nextcloud/dialogs'
 import { getLocale } from '@nextcloud/l10n'
 import CardMenuEntries from '../cards/CardMenuEntries.vue'
+import NoteTextOutline from 'vue-material-design-icons/NoteTextOutline.vue';
+import CardSidebarTabNotes from './CardSidebarTabNotes.vue'
 
 const capabilities = getCapabilities()
 
@@ -104,11 +115,13 @@ export default {
 		CardSidebarTabComments,
 		CardSidebarTabActivity,
 		CardSidebarTabDetails,
+		CardSidebarTabNotes,
 		ActivityIcon,
 		AttachmentIcon,
 		CommentIcon,
 		HomeIcon,
 		CardMenuEntries,
+		NoteTextOutline,
 	},
 	mixins: [relativeDate],
 	props: {
