@@ -10,7 +10,7 @@
         :name="title"
         v-click-outside="closeSidebar"
         @close="closeSidebar">
-		
+
         <NcAppSidebarTab name="Comments" id="comments-tab">
             <template #icon>
                 <Comment :size="20" />

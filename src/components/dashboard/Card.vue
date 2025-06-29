@@ -3,30 +3,32 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<div :key="card.id" class="card-wrapper">
-		<a 	@click="redirect"
-			target="_blank"	
-			class="card">
-			<div class="card--header">
-				<DueDate class="right" :card="card" />
-				<span class="title" dir="auto">{{ card.title }}</span>
-			</div>
+	<div :key="card.id"
+		class="card"
+		@click="redirect"
+		target="_blank">
+
+		<div class="card--header">
+			<span class="title" dir="auto">{{ card.title }}</span>
+			<DueDate :card="card" />
+		</div>
+
+		<div class="card--footer">
 			<ul v-if="card.labels && card.labels.length" class="labels">
 				<li v-for="label in card.labels" :key="label.id" :style="labelStyle(label)">
 					<span dir="auto">{{ label.title }}</span>
 				</li>
 			</ul>
-			<div class="card-actions">
-				<NcButton 
-					class="comment-section" 
-					@click.stop="openSidebar"
-					variant="tertiary-no-background">
-					<template #icon>
-						<CommentOutline :size="20" />
-					</template>
-				</NcButton>
-			</div>
-		</a>
+			<div v-else />
+			<NcButton
+				class="comment-section"
+				@click.stop="openSidebar"
+				variant="tertiary-no-background">
+				<template #icon>
+					<CommentOutline :size="20" />
+				</template>
+			</NcButton>
+		</div>
 	</div>
 </template>
 
@@ -77,10 +79,14 @@ export default {
 	@import '../../css/labels';
 
 	.card {
-		display: block;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+
 		border-radius: var(--border-radius-large);
 		padding: 8px;
 		height: 60px;
+		cursor: pointer;
 
 		&:hover {
 			background-color: var(--color-background-hover);
@@ -88,34 +94,34 @@ export default {
 	}
 
 	.card--header {
-		overflow: hidden;
+		display: flex;
+		align-items: center;
+		justify-content: space-between; 
+
 		.title {
 			overflow: hidden;
 			text-overflow: ellipsis;
 			white-space: nowrap;
-			display: block;
 		}
+	}
+
+	.card--footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 	}
 
 	.labels {
 		margin-left: 0;
+		flex-shrink: 1;
+		overflow: hidden;
+		white-space: nowrap;
 	}
 
 	.duedate:deep(.due) {
-		margin: 0 0 0 10px;
+		margin: 0; 
 		padding: 2px 4px;
 		font-size: 90%;
-	}
-
-	.right {
-		float: right;
-	}
-
-	.comment-section {
-		margin-left: auto;
-	}
-
-	.comments-feed {
-		list-style: none;
+		flex-shrink: 0;
 	}
 </style>
