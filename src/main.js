@@ -11,9 +11,9 @@ import { translate, translatePlural } from '@nextcloud/l10n'
 import { showError } from '@nextcloud/dialogs'
 import { subscribe } from '@nextcloud/event-bus'
 import ClickOutside from 'vue-click-outside'
-import './shared-init.js'
-import './models/index.js'
-import './sessions.js'
+import './shared-init.js';
+import './models/index.js';
+import './sessions.js';
 
 // the server snap.js conflicts with vertical scrolling so we disable it
 document.body.setAttribute('data-snap-ignore', 'true')
