@@ -31,6 +31,7 @@
                 v-for="note in notes"
                 :key="note.id"
                 :note="note"
+                :can-edit="true"
                 @update-note="handleUpdateNote"
                 @delete-note="handleDeleteNote" />
             
@@ -89,7 +90,17 @@ export default {
     },
 	data() {
 		return {
-            notes: [],
+            notes: [{
+                id: 1,
+                content: "This is the first note. It supports **markdown** and links like https://nextcloud.com",
+                createdAt: "2025-06-28T10:00:00Z",
+                updatedAt: "2025-06-29T19:30:00Z",
+                author: {
+                    name: 'Jane Doe',
+                    avatarUrl: 'path/to/avatar.jpg'
+                },
+                cardId: -1
+            }],
 			noteContent: '',
             isLoading: false,
             isNotesFetching: false,
@@ -212,5 +223,9 @@ export default {
 .add-note__actions {
 	display: flex;
 	justify-content: flex-end;
+}
+
+.notes-feed {
+    margin-top: 5px;
 }
 </style>

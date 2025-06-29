@@ -1,5 +1,5 @@
 <template>
-	<div class="note-item">
+	<div class="note-item" @mouseover="handleShowingActions" @mouseleave="handleHidingActions">
 		<div class="note-item__avatar">
 			<img v-if="note.author.avatarUrl" :src="note.author.avatarUrl" :alt="note.author.name" />
 			<div v-else class="avatar-initials">{{ authorInitials }}</div>
@@ -90,8 +90,8 @@ export default {
 			type: Object,
 			required: true,
 		},
-        showActions: {
-            type: Boolean,
+        canEdit: {
+            type: Boolean, 
             default: false
         }
 	},
@@ -99,6 +99,7 @@ export default {
 		return {
 			isEditing: false,
 			editedContent: '',
+            showActions: false
 		}
 	},
 	computed: {
@@ -174,6 +175,7 @@ export default {
 			this.$emit('update-note', {
 				id: this.note.id,
 				content: this.editedContent,
+                cardId: this.cardId
 			})
 			this.isEditing = false
 		},
@@ -186,6 +188,12 @@ export default {
 				this.$emit('delete-note', this.note.id)
 			}
 		},
+        handleShowingActions() {
+            this.showActions = this.canEdit;
+        },
+        handleHidingActions() {
+            this.showActions = false;
+        }
 	},
 }
 </script>

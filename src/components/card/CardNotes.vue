@@ -65,7 +65,7 @@ export default {
 		return {
             notes: [{
                 id: 1,
-                content: "This is the first note. It supports **markdown** and links like https://nextcloud.com",
+                content: "# Header. \nThis is the first note. It supports **markdown** and links like https://nextcloud.com",
                 createdAt: "2025-06-28T10:00:00Z",
                 updatedAt: "2025-06-29T19:30:00Z",
                 author: {
