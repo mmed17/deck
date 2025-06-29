@@ -60,12 +60,14 @@
 import { NcButton } from '@nextcloud/vue'
 import { getCurrentUser } from '@nextcloud/auth';
 import { generateUrl } from '@nextcloud/router';
+import axios from '@nextcloud/axios'
 
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon';
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent';
 import InfiniteLoading from 'vue-infinite-loading';
 import Comment from 'vue-material-design-icons/CommentOutline.vue';
 import NoteItem from './NoteItem.vue';
+import { showError, showSuccess } from '@nextcloud/dialogs';
 
 export default {
 	name: 'CardSidebarTabNotes',
@@ -90,24 +92,20 @@ export default {
     },
 	data() {
 		return {
-            notes: [{
-                id: 1,
-                content: "This is the first note. It supports **markdown** and links like https://nextcloud.com",
-                createdAt: "2025-06-28T10:00:00Z",
-                updatedAt: "2025-06-29T19:30:00Z",
-                author: {
-                    name: 'Jane Doe',
-                    avatarUrl: 'path/to/avatar.jpg'
-                },
-                cardId: -1
-            }],
+            notes: [],
 			noteContent: '',
             isLoading: false,
             isNotesFetching: false,
             notesError: null,
-            notesLoaderIdentifier: 0
+            notesLoaderIdentifier: 0,
+            page: 1,
+			notesPerPage: 10,
+            canLoadMoreNotes: true,
 		}
 	},
+    mounted() {
+        this.notesInfiniteHandler();
+    },
 	computed: {
         currentUser() {
             return getCurrentUser();
@@ -140,25 +138,102 @@ export default {
 	},
 	methods: {
 		/**
-		 * Handles the submission of a new note.
+		 * Handles creating a new note.
+		 * Sends a POST request to the backend.
 		 */
-		handleSubmit() {
-			if (this.isSubmitDisabled) {
-				return
-			}
-			// Emits the content of the note to the parent component.
-			// The parent is responsible for creating the full note object
-			// with timestamps and IDs from the server.
-			this.$emit('add-note', {
-				content: this.noteContent,
-			})
+		async handleSubmit() {
+			if (this.isSubmitDisabled) return
 
-			// Clear the textarea for the next note
-			this.noteContent = ''
+			this.isLoading = true
+			const url = generateUrl(`/apps/deck/api/v1.0/cards/${this.card.id}/notes`)
+			const payload = {
+				content: this.noteContent,
+			}
+
+			try {
+				const response = await axios.post(url, payload)
+				this.notes.unshift(response.data)
+				this.noteContent = ''
+			} catch (e) {
+				console.error(e)
+				showError(t('deck', 'Could not create note.'))
+			} finally {
+				this.isLoading = false
+			}
 		},
-        notesInfiniteHandler($state) {},
-        handleUpdateNote() {},
-        handleDeleteNote() {}
+        /**
+		 * Fetches pages of notes for the infinite scroller.
+		 * Sends a GET request to the backend.
+		 * @param {object} $state - The state object from the vue-infinite-loading component.
+		 */
+		async notesInfiniteHandler($state) {
+            if (!this.canLoadMoreNotes) {
+                $state?.complete();
+                return;
+            }
+
+			this.isNotesFetching = true
+			const offset = (this.page - 1) * this.notesPerPage;
+			const url = generateUrl(`/apps/deck/api/v1.0/cards/${this.card.id}/notes?limit=${this.notesPerPage}&offset=${offset}`);
+
+			try {
+				const response = await axios.get(url);
+
+				if (response.data.length) {
+					this.page += 1;
+					this.notes.push(...response.data);
+                    if($state) {
+                        $state.loaded();
+                    }
+				} else {
+                    this.canLoadMoreNotes = false;
+                    $state?.complete();
+				}
+			} catch (e) {
+				console.error(e);
+				this.notesError = t('deck', 'Could not load notes.');
+                $state?.complete();
+			} finally {
+				this.isNotesFetching = false;
+                this.notesLoaderIdentifier += 1;
+			}
+		},
+        /**
+		 * Handles updating an existing note.
+		 * Sends a PUT request to the backend.
+		 * @param {object} payload - The event payload from NoteItem.vue, e.g., { id, content }
+		 */
+		async handleUpdateNote(payload) {
+			const url = generateUrl(`/apps/deck/api/v1.0/notes/${payload.id}`);
+			
+			try {
+				const response = await axios.put(url, { content: payload.content });
+				const noteIndex = this.notes.findIndex(n => n.id === payload.id);
+				if (noteIndex !== -1) {
+					this.$set(this.notes, noteIndex, response.data);
+				}
+				showSuccess(t('deck', 'Note updated'))
+			} catch (e) {
+				console.error(e)
+				showError(t('deck', 'Could not update note.'))
+			}
+		},
+        /**
+		 * Handles deleting a note.
+		 * Sends a DELETE request to the backend.
+		 * @param {number} noteId - The ID of the note to delete.
+		 */
+		async handleDeleteNote(noteId) {
+			const url = generateUrl(`/apps/deck/api/v1.0/notes/${noteId}`)
+
+			try {
+				await axios.delete(url)
+				this.notes = this.notes.filter(n => n.id !== noteId)
+			} catch (e) {
+				console.error(e)
+				showError(t('deck', 'Could not delete note.'))
+			}
+		}
 	},
 }
 </script>
@@ -166,7 +241,7 @@ export default {
 <style lang="scss" scoped>
 .add-note {
 	display: flex;
-	padding-top: 16px; // Space above the add note form
+	padding-top: 16px;
 	gap: 12px;
 }
 

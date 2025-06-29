@@ -34,7 +34,7 @@
 </template>
 
 <script>
-import { generateOcsUrl } from '@nextcloud/router';
+import { generateOcsUrl, generateUrl } from '@nextcloud/router';
 import NoteTextOutline from 'vue-material-design-icons/NoteTextOutline.vue';
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon';
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent';
@@ -63,17 +63,7 @@ export default {
 	},
 	data() {
 		return {
-            notes: [{
-                id: 1,
-                content: "# Header. \nThis is the first note. It supports **markdown** and links like https://nextcloud.com",
-                createdAt: "2025-06-28T10:00:00Z",
-                updatedAt: "2025-06-29T19:30:00Z",
-                author: {
-                    name: 'Jane Doe',
-                    avatarUrl: 'path/to/avatar.jpg'
-                },
-                cardId: -1
-            }],
+            notes: [],
             notesLoading: false,
             notesOffset: 0,
             canLoadMoreNotes: true,
@@ -81,6 +71,9 @@ export default {
 			notesError: null
 		}
 	},
+    created() {
+        this.notesInfiniteHandler();
+    },
 	computed: {
 		notesUrl() {
 			return `/apps/deck/api/v1.0/cards/${this.cardId}/notes`;
@@ -88,43 +81,38 @@ export default {
 	},
 	methods: {
 		async notesInfiniteHandler($state) {
-            // if (!this.canLoadMoreNotes && $state) {
-            //     $state.complete();
-            //     return;
-            // }
+            if (!this.canLoadMoreNotes) {
+                $state?.complete();
+                return;
+            }
 
-            // this.notesLoading = true;
-            // try {
-			// 	const url = generateOcsUrl(this.notesUrl);
-			// 	const response = await ocs.get(url, {
-			// 		params: {
-			// 			limit: API_LIMIT,
-			// 			offset: this.notesOffset
-			// 		}
-			// 	});
-			// 	const notes = response.data.ocs.data;
-			// 	if (notes.length) {
-            //         this.notes.push(...notes);
-            //         this.notesOffset += notes.length;
-			// 		if($state) {
-			// 			$state.loaded();
-			// 		}
-            //     } else {
-            //         this.canLoadMoreNotes = false;
-			// 		if($state) {
-			// 			$state.complete();
-			// 		}
-            //     }
-            // } catch (e) {
-            //     console.error('Failed to fetch notes', e);
-            //     this.notesError = 'Failed to load notes';
-			// 	if($state) {
-			// 		$state.error();
-			// 	}
-            // } finally {
-            //     this.notesLoading = false;
-			// 	this.notesLoaderIdentifier += 1;
-            // }
+            this.notesLoading = true;
+            try {
+				const url = generateUrl(`/apps/deck/api/v1.0/cards/${this.cardId}/notes?limit=${API_LIMIT}&offset=${this.notesOffset}`);
+
+				const response = await ocs.get(url, {
+					params: {
+						limit: API_LIMIT,
+						offset: this.notesOffset
+					}
+				});
+				const notes = response.data;
+				if (notes.length) {
+                    this.notes.push(...notes);
+                    this.notesOffset += notes.length;
+                    $state?.loaded();
+                } else {
+                    this.canLoadMoreNotes = false;
+                    $state?.complete();
+                }
+            } catch (e) {
+                console.error('Failed to fetch notes', e);
+                this.notesError = 'Failed to load notes';
+                $state?.error();
+            } finally {
+                this.notesLoading = false;
+				this.notesLoaderIdentifier += 1;
+            }
 		},
         handleUpdateNote(payload) {
             console.log('Parent received update for note:', payload.id);

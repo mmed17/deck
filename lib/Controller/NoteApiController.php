@@ -78,7 +78,7 @@ class NoteApiController extends Controller {
             return new DataResponse(['error' => 'Content cannot be empty'], Http::STATUS_BAD_REQUEST);
         }
 
-        $note.setContent($content);
+        $note->setContent($content);
 
         $updatedNote = $this->mapper->update($note);
         return new DataResponse($updatedNote);

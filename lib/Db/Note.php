@@ -26,8 +26,8 @@ class Note extends Entity implements \JsonSerializable {
             'userId' => $this->userId,
             'cardId' => $this->cardId,
             'content' => $this->content,
-            'createdAt' => $this->createdAt,
-            'updatedAt' => $this->updatedAt,
+            'createdAt' => $this->createdAt->format(\DateTime::ATOM),
+            'updatedAt' => $this->updatedAt->format(\DateTime::ATOM),
         ];
     }
 }

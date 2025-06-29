@@ -20,7 +20,14 @@ class NoteMapper extends QBMapper {
      * Find a single note by its ID
      */
     public function find(int $id): Note {
-        return parent::find($id);
+        $qb = $this->db->getQueryBuilder();
+
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, 
+            IQueryBuilder::PARAM_INT)));
+
+        return $this->findEntity($qb);
     }
 
     /**
