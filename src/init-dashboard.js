@@ -19,6 +19,7 @@ const getAsyncImports = async () => {
 	const { default: Vue } = await import('vue')
 	const { default: Vuex } = await import('vuex')
 	const { default: dashboard } = await import('./store/dashboard.js')
+	const { default: card } = await import('./store/card.js')
 
 	Vue.prototype.t = t
 	Vue.prototype.n = n
@@ -28,6 +29,7 @@ const getAsyncImports = async () => {
 	const store = new Vuex.Store({
 		modules: {
 			dashboard,
+			card
 		},
 		strict: debug,
 	})

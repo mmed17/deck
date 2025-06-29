@@ -23,11 +23,15 @@ input[type=text]:hover+input[type=submit].icon-confirm {
 }
 aside#card-notes {
     position: fixed;
+	z-index: 15000;
     right: 0;
     top: 50px;
 	height: calc(100vh - 50px);
     left: auto;
-    padding: 25px;
+    padding: 15px;
     box-shadow: -5px 0px 15px rgba(0, 0, 0, 0.2);
 	border-top-left-radius: 2rem;
+}
+aside#card-notes .app-sidebar-tabs__content {
+	padding-bottom: 30px;
 }

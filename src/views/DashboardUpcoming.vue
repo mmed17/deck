@@ -15,7 +15,16 @@
 			@hide="() => {}"
 			@markDone="() => {}">
 			<template #default="{ item }">
-				<Card :card="item" :redirect-to-project="true" />
+				<Card 
+					:card="item" 
+					:redirect-to-project="true" 
+					@open:sidebar="handleSidebarOpen" />
+				
+				<CardNotesAndComments 
+					v-if="openedCardId === item.id"
+					:title="item.title"
+					:card-id="item.id"
+					@close="handleSidebarClose" />
 			</template>
 		</NcDashboardWidget>
 
@@ -41,11 +50,13 @@ import Card from '../components/dashboard/Card.vue'
 import { generateUrl } from '@nextcloud/router'
 import CreateNewCardCustomPicker from './CreateNewCardCustomPicker.vue'
 import { getCurrentUser } from '@nextcloud/auth'
+import CardNotesAndComments from "../components/card/CardNotesAndComments.vue";
 
 export default {
 	name: 'DashboardUpcoming',
 	components: {
 		CreateNewCardCustomPicker,
+		CardNotesAndComments,
 		NcModal,
 		NcDashboardWidget,
 		NcButton,
@@ -55,7 +66,7 @@ export default {
 	data() {
 		return {
 			loading: false,
-			showAddCardModal: false
+			showAddCardModal: false,
 		}
 	},
 	computed: {
@@ -63,7 +74,8 @@ export default {
 			'assignedCardsDashboard',
 		]),
 		...mapState({
-            selectedBoardId: state => state.dashboard.selectedBoardId
+            selectedBoardId: state => state.dashboard.selectedBoardId,
+			openedCardId: state => state.card.openedCardId
         }),
 		isAdmin() {
 			return !!getCurrentUser()?.isAdmin
@@ -109,7 +121,15 @@ export default {
 			this.$store.dispatch('loadUpcoming').then(() => {
 				this.loading = false
 			})
-        }
+        },
+		handleSidebarOpen(card) {
+			this.$store.commit('setOpenedCardId', card.id);
+		},
+		handleSidebarClose() {
+			setTimeout(() => {
+				this.$store.commit('setOpenedCardId', null);
+			}, 200);
+		}
 	},
 }
 </script>

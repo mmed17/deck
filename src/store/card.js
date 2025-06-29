@@ -12,6 +12,7 @@ const apiClient = new CardApi()
 export default {
 	state: {
 		cards: [],
+		openedCardId: null
 	},
 	getters: {
 		cardsByStack: (state, getters, rootState) => (id) => {
@@ -182,6 +183,9 @@ export default {
 		cardById: state => (id) => {
 			return state.cards.find((card) => card.id === id)
 		},
+		getOpenedCardId() {
+			return state.openedCardId;
+		}
 	},
 	mutations: {
 		addCard(state, card) {
@@ -270,6 +274,9 @@ export default {
 				this.commit('addCard', card)
 			}
 		},
+		setOpenedCardId: (state, cardId) => {
+			state.openedCardId = cardId;
+		}
 	},
 	actions: {
 		async cloneCard({ commit }, { cardId, targetStackId }) {
