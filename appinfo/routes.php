@@ -72,6 +72,12 @@ return [
 		['name' => 'label#update', 'url' => '/labels/{labelId}', 'verb' => 'PUT'],
 		['name' => 'label#delete', 'url' => '/labels/{labelId}', 'verb' => 'DELETE'],
 
+		// notes api
+		['name' => 'note_api#index', 'url' => '/api/notes/{cardId}', 'verb' => 'GET'],
+        ['name' => 'note_api#create', 'url' => '/api/notes', 'verb' => 'POST'],
+        ['name' => 'note_api#update', 'url' => '/api/notes/{noteId}', 'verb' => 'PUT'],
+        ['name' => 'note_api#destroy', 'url' => '/api/notes/{noteId}', 'verb' => 'DELETE'],
+
 		// api
 		['name' => 'board_api#index', 'url' => '/api/v{apiVersion}/boards', 'verb' => 'GET'],
 		['name' => 'board_api#get', 'url' => '/api/v{apiVersion}/boards/{boardId}', 'verb' => 'GET'],
