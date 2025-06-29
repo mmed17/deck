@@ -31,20 +31,25 @@
 		<NcAppSidebar
 			id="card-notes"
 			ref="sidebar" 
-			:name="'Card N° ' + card.id "
+			:name="card.title"
 			:open="showSidebar"
 			v-click-outside="closeSidebar"
 			@close="closeSidebar">
 
 			<NcAppSidebarTab name="Comments" id="comments-tab">
-				<template #icon><Comment :size="20" /></template>
+				<template #icon>
+					<Comment :size="20" />
+				</template>
 				<div class="tab-content">
 					<ul class="comments-feed">
 						<CommentItem v-for="comment in comments"
 							:key="comment.id"
-							:comment="comment" />
+							:comment="comment"
+							:show-extra-options="false"/>
 
-						<InfiniteLoading :identifier="card.id" @infinite="commentsInfiniteHandler">
+						<InfiniteLoading 
+							:identifier="commentsLoaderIdentifier" 
+							@infinite="commentsInfiniteHandler">
 							<div slot="spinner">
 								<NcLoadingIcon :size="20" />
 							</div>
@@ -67,17 +72,38 @@
 			<!-- http://localhost:8080/ocs/v2.php/apps/deck/api/v1.0/cards/21/notes?limit=10&offset=0 -->
 			<NcAppSidebarTab name="Notes" id="notes-tab">
 				<template #icon><NoteTextOutline :size="20" /></template>
-				Second tab content
+
+				<ul class="notes-feed">
+					<!-- Note item -->
+
+					<InfiniteLoading 
+						:identifier="notesLoaderIdentifier" 
+						@infinite="notesInfiniteHandler">
+						<div slot="spinner">
+							<NcLoadingIcon :size="20" />
+						</div>
+						<div slot="no-more" />
+						<div slot="no-results" />
+					</InfiniteLoading>
+				</ul>
+
+				<NcEmptyContent 
+					v-if="!notesLoading && notes.length === 0"
+					:name="error ? error : t('deck', 'No notes yet.')">
+					<template #icon>
+						<Comment />
+					</template>
+				</NcEmptyContent>
 			</NcAppSidebarTab>
 		</NcAppSidebar>
 	</div>
 </template>
 
 <script>
-import DueDate from '../cards/badges/DueDate.vue';
 import { generateOcsUrl, generateUrl } from '@nextcloud/router';
-import labelStyle from '../../mixins/labelStyle.js';
 import { NcButton } from "@nextcloud/vue";
+import DueDate from '../cards/badges/DueDate.vue';
+import labelStyle from '../../mixins/labelStyle.js';
 import Comment from 'vue-material-design-icons/CommentOutline.vue';
 import NoteTextOutline from 'vue-material-design-icons/NoteTextOutline.vue';
 import NcAppSidebarTab from '@nextcloud/vue/components/NcAppSidebarTab';
@@ -130,6 +156,8 @@ export default {
             notesOffset: 0,
             canLoadMoreComments: true,
             canLoadMoreNotes: true,
+			commentsLoaderIdentifier: 0,
+			notesLoaderIdentifier: 0,
 		}
 	},
 	computed: {
@@ -192,8 +220,12 @@ export default {
 				}
             } finally {
                 this.commentsLoading = false;
+				this.commentsLoaderIdentifier += 1;
             }
         },
+		async notesInfiniteHandler($state) {
+
+		}
 	}
 }
 </script>

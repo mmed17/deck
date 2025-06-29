@@ -125,7 +125,7 @@ export default {
 		},
 		showExtraOptions: {
 			type: Boolean,
-			default: false
+			default: true
 		}
 	},
 	data() {
