@@ -40,10 +40,10 @@
 <script>
 import { mapState, mapGetters } from 'vuex'
 import { NcAvatar } from '@nextcloud/vue'
+import { getCurrentUser } from '@nextcloud/auth'
 import CommentItem from './CommentItem.vue'
 import CommentForm from './CommentForm.vue'
 import InfiniteLoading from 'vue-infinite-loading'
-import { getCurrentUser } from '@nextcloud/auth'
 
 export default {
 	name: 'CardSidebarTabComments',

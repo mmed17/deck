@@ -1,29 +1,58 @@
 <template>
-	<div class="add-note">
-		<div class="add-note__avatar">
-			<img v-if="currentUserAvatar" :src="currentUserAvatar" :alt="currentUser.name" />
-			<div v-else class="avatar-initials">{{ authorInitials }}</div>
-		</div>
+	<div>
+        <div class="add-note">
+            <div class="add-note__avatar">
+                <img v-if="currentUserAvatar" :src="currentUserAvatar" :alt="currentUser.name" />
+                <div v-else class="avatar-initials">{{ authorInitials }}</div>
+            </div>
 
-		<div class="add-note__main">
-			<textarea
-				v-model="noteContent"
-				class="note-textarea"
-				:placeholder="t('deck', 'Write a private note...')"
-				rows="3"
-				:disabled="isLoading"/>
+            <div class="add-note__main">
+                <textarea
+                    v-model="noteContent"
+                    class="note-textarea"
+                    :placeholder="t('deck', 'Write a private note...')"
+                    rows="3"
+                    :disabled="isLoading"/>
+                
+                <div class="add-note__actions">
+                    <NcButton
+                        type="primary"
+                        :disabled="isSubmitDisabled"
+                        :loading="isLoading"
+                        @click="handleSubmit">
+                        {{ t('deck', 'Add note') }}
+                    </NcButton>
+                </div>
+            </div>
+        </div>
+
+        <ul class="notes-feed">
+            <NoteItem
+                v-for="note in notes"
+                :key="note.id"
+                :note="note"
+                @update-note="handleUpdateNote"
+                @delete-note="handleDeleteNote" />
             
-			<div class="add-note__actions">
-				<NcButton
-					type="primary"
-					:disabled="isSubmitDisabled"
-					:loading="isLoading"
-					@click="handleSubmit">
-					{{ t('deck', 'Add note') }}
-				</NcButton>
-			</div>
-		</div>
-	</div>
+            <InfiniteLoading 
+                :identifier="notesLoaderIdentifier" 
+                @infinite="notesInfiniteHandler">
+                <div slot="spinner">
+                    <NcLoadingIcon :size="20" />
+                </div>
+                <div slot="no-more" />
+                <div slot="no-results" />
+            </InfiniteLoading>
+        </ul>
+
+        <NcEmptyContent 
+            v-if="!isNotesFetching && notes.length === 0"
+            :name="notesError ? notesError : t('deck', 'No notes yet.')">
+            <template #icon>
+                <Comment />
+            </template>
+        </NcEmptyContent>
+    </div>
 </template>
 
 <script>
@@ -31,10 +60,21 @@ import { NcButton } from '@nextcloud/vue'
 import { getCurrentUser } from '@nextcloud/auth';
 import { generateUrl } from '@nextcloud/router';
 
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon';
+import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent';
+import InfiniteLoading from 'vue-infinite-loading';
+import Comment from 'vue-material-design-icons/CommentOutline.vue';
+import NoteItem from './NoteItem.vue';
+
 export default {
 	name: 'CardSidebarTabNotes',
 	components: {
+        Comment,
+        NoteItem,
 		NcButton,
+        NcLoadingIcon,
+        NcEmptyContent,
+        InfiniteLoading,
 	},
 	props: {
         card: {
@@ -49,16 +89,22 @@ export default {
     },
 	data() {
 		return {
+            notes: [],
 			noteContent: '',
             isLoading: false,
+            isNotesFetching: false,
+            notesError: null,
+            notesLoaderIdentifier: 0
 		}
 	},
 	computed: {
         currentUser() {
             return getCurrentUser();
         },
-        currentUserAvatar(size = 64) {
-            return generateUrl(`/avatar/${this.currentUser.uid}/${size}`);
+        currentUserAvatar() {
+            if(!this.currentUser || !this.currentUser.uid) return;
+
+            return generateUrl(`/avatar/${this.currentUser.uid}/64`);
         },
 		/**
 		 * Generates user initials as a fallback for the avatar.
@@ -99,6 +145,9 @@ export default {
 			// Clear the textarea for the next note
 			this.noteContent = ''
 		},
+        notesInfiniteHandler($state) {},
+        handleUpdateNote() {},
+        handleDeleteNote() {}
 	},
 }
 </script>
