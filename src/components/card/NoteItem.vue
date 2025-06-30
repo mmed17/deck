@@ -172,7 +172,7 @@ export default {
 		isEdited() {
 			const createdAt = new Date(this.note.createdAt).getTime()
 			const updatedAt = new Date(this.note.updatedAt).getTime()
-			return updatedAt - createdAt > 60000 // 60 seconds
+			return updatedAt - createdAt > 0
 		},
 	},
 	methods: {

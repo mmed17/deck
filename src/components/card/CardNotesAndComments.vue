@@ -24,6 +24,7 @@
 			</template>
 			<CardNotes :card-id="cardId" />
         </NcAppSidebarTab>
+		
     </NcAppSidebar>
 </template>
 

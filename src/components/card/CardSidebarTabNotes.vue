@@ -104,6 +104,7 @@ export default {
 		}
 	},
     mounted() {
+        console.log("[mounted] TRIGGER LOADING");
         this.notesInfiniteHandler();
     },
 	computed: {
@@ -167,37 +168,50 @@ export default {
 		 * @param {object} $state - The state object from the vue-infinite-loading component.
 		 */
 		async notesInfiniteHandler($state) {
+            console.log("[notesInfiniteHandler] Called with state:", $state);
+
+            if (this.isNotesFetching) {
+                console.log("[notesInfiniteHandler] Fetch in progress, skipping...");
+                return;
+            }
+
             if (!this.canLoadMoreNotes) {
+                console.log("[notesInfiniteHandler] No more notes to load, completing...");
                 $state?.complete();
                 return;
             }
 
-			this.isNotesFetching = true
-			const offset = (this.page - 1) * this.notesPerPage;
-			const url = generateUrl(`/apps/deck/api/v1.0/cards/${this.card.id}/notes?limit=${this.notesPerPage}&offset=${offset}`);
+            console.log("[notesInfiniteHandler] Loading more notes...");
 
-			try {
-				const response = await axios.get(url);
+            this.isNotesFetching = true;
 
-				if (response.data.length) {
-					this.page += 1;
-					this.notes.push(...response.data);
-                    if($state) {
-                        $state.loaded();
-                    }
-				} else {
+            const offset = (this.page - 1) * this.notesPerPage;
+            const url = generateUrl(`/apps/deck/api/v1.0/cards/${this.card.id}/notes?limit=${this.notesPerPage}&offset=${offset}`);
+            console.log(`[notesInfiniteHandler] Fetching from URL: ${url}`);
+
+            try {
+                const response = await axios.get(url);
+                console.log("[notesInfiniteHandler] Response received:", response);
+
+                if (response.data.length) {
+                    this.page += 1;
+                    console.log(`[notesInfiniteHandler] Loaded ${response.data.length} notes, new page: ${this.page}`);
+                    this.notes.push(...response.data);
+                    $state?.loaded();
+                } else {
+                    console.log("[notesInfiniteHandler] No more notes returned from API.");
                     this.canLoadMoreNotes = false;
                     $state?.complete();
-				}
-			} catch (e) {
-				console.error(e);
-				this.notesError = t('deck', 'Could not load notes.');
+                }
+            } catch (e) {
+                console.error("[notesInfiniteHandler] Error occurred:", e);
+                this.notesError = t('deck', 'Could not load notes.');
                 $state?.complete();
-			} finally {
-				this.isNotesFetching = false;
-                this.notesLoaderIdentifier += 1;
-			}
-		},
+            } finally {
+                this.isNotesFetching = false;
+                console.log("[notesInfiniteHandler] Fetching complete, isNotesFetching reset to false.");
+            }
+        },
         /**
 		 * Handles updating an existing note.
 		 * Sends a PUT request to the backend.
@@ -233,7 +247,7 @@ export default {
 				console.error(e)
 				showError(t('deck', 'Could not delete note.'))
 			}
-		}
+		},
 	},
 }
 </script>

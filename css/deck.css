@@ -35,3 +35,7 @@ aside#card-notes {
 aside#card-notes .app-sidebar-tabs__content {
 	padding-bottom: 30px;
 }
+
+div.list-item-content__details {
+	margin: auto !important;
+}
