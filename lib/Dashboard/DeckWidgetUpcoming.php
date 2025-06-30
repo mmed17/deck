@@ -83,6 +83,6 @@ class DeckWidgetUpcoming implements IWidget {
 	 * @inheritDoc
 	 */
 	public function load(): void {
-		Util::addScript('deck', 'deck-dashboard');
+		Util::addScript('deck', 'init-dashboard');
 	}
 }

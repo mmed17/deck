@@ -63,6 +63,6 @@ class DeckWidgetOverdue implements IWidget {
 	 * @inheritDoc
 	 */
 	public function load(): void {
-		\OCP\Util::addScript('deck', 'deck-dashboard');
+		\OCP\Util::addScript('deck', 'init-dashboard');
 	}
 }
