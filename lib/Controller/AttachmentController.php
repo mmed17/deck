@@ -53,8 +53,9 @@ class AttachmentController extends Controller {
 		$projectFolderPath = null;
         $project = $this->projectMapper->findByCardId($cardId);
 		
-        if ($project !== null) {
-            $projectFolderPath = $project->getFolderPath() . '/Scrumban';
+        if ($project !== null && $project->getFolderPath() !== null) {
+			$folderName = basename($project->getFolderPath());
+            $projectFolderPath = $folderName . '/Scrumban';
         }
 
 		return $this->attachmentService->create(
