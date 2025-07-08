@@ -68,7 +68,6 @@ export default {
 			window.open(url);
 		},
 		openSidebar() {
-			console.log("[Card] Open sidebar");
 			this.$emit('open:sidebar', this.card);
 		}
 	}

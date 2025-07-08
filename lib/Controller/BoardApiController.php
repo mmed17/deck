@@ -7,6 +7,7 @@
 
 namespace OCA\Deck\Controller;
 
+use ErrorException;
 use OCA\Deck\Db\Board;
 use OCA\Deck\Service\BoardService;
 use OCA\Deck\StatusException;
@@ -30,7 +31,7 @@ class BoardApiController extends ApiController {
 		$appName,
 		IRequest $request,
 		private BoardService $boardService,
-		private $userId,
+		private $userId
 	) {
 		parent::__construct($appName, $request);
 	}

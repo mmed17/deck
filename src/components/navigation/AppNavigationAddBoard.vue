@@ -43,6 +43,7 @@
 import { NcButton, NcColorPicker, NcAppNavigationItem, NcLoadingIcon, NcTextField } from '@nextcloud/vue'
 import CheckIcon from 'vue-material-design-icons/Check.vue'
 import CloseIcon from 'vue-material-design-icons/Close.vue'
+import { showError, showSuccess } from '@nextcloud/dialogs';
 
 /**
  *
@@ -79,10 +80,15 @@ export default {
 		async createBoard(e) {
 			this.loading = true
 			const title = this.value.trim()
-			await this.$store.dispatch('createBoard', {
+			const res = await this.$store.dispatch('createBoard', {
 				title,
-				color: this.color.substring(1),
+				color: this.color.substring(1)
 			})
+
+			if(res && res.status === 403) {
+				showError(res.response.data.message)
+			}
+
 			this.loading = false
 			this.editing = false
 			this.color = randomColor()
