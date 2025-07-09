@@ -30,6 +30,7 @@ use OCA\Deck\Db\StackMapper;
 use OCA\Deck\Event\AclCreatedEvent;
 use OCA\Deck\Event\AclDeletedEvent;
 use OCA\Deck\Event\AclUpdatedEvent;
+use OCA\Deck\Event\BoardCreatedEvent;
 use OCA\Deck\Event\BoardUpdatedEvent;
 use OCA\Deck\Event\CardCreatedEvent;
 use OCA\Deck\NoPermissionException;
@@ -192,7 +193,7 @@ class BoardService {
 		$this->boardServiceValidator->check(compact('title', 'userId', 'color'));
 
 		if (!$this->permissionService->canCreate()) {
-			throw new NoPermissionException('Creating boards has been disabled for your account.');
+			throw new NoPermissionException(message: 'Creating boards has been disabled for your account.');
 		}
 
 		// $subscription = $this->groupSubscriptionMapper->findByUserId($userId);
@@ -210,6 +211,8 @@ class BoardService {
 		$board->setColor($color);
 		$new_board = $this->boardMapper->insert($board);
 		
+		$this->eventDispatcher->dispatchTyped(new BoardCreatedEvent($board));
+
 		// $this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), 1);
 		
 		// create default stacks
