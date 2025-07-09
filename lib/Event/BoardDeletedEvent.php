@@ -12,7 +12,7 @@ class BoardDeletedEvent extends Event {
         $this->boardId = $boardId;
     }
 
-    public function getBoard(): int {
+    public function getBoardId(): int {
         return $this->boardId;
     }
 }
