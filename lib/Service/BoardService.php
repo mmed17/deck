@@ -31,6 +31,7 @@ use OCA\Deck\Event\AclCreatedEvent;
 use OCA\Deck\Event\AclDeletedEvent;
 use OCA\Deck\Event\AclUpdatedEvent;
 use OCA\Deck\Event\BoardCreatedEvent;
+use OCA\Deck\Event\BoardDeletedEvent;
 use OCA\Deck\Event\BoardUpdatedEvent;
 use OCA\Deck\Event\CardCreatedEvent;
 use OCA\Deck\NoPermissionException;
@@ -283,6 +284,9 @@ class BoardService {
 		}
 		$board->setDeletedAt(time());
 		$board = $this->boardMapper->update($board);
+
+		$this->eventDispatcher->dispatchTyped(new BoardDeletedEvent($id));
+
 		// $this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), -1);
 		
 		$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_BOARD, $board, ActivityManager::SUBJECT_BOARD_DELETE);
