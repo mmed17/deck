@@ -21,8 +21,6 @@ use OCA\Deck\Db\CardMapper;
 use OCA\Deck\Event\AclCreatedEvent;
 use OCA\Deck\Event\AclDeletedEvent;
 use OCA\Deck\Event\AclUpdatedEvent;
-use OCA\Deck\Event\BoardCreatedEvent;
-use OCA\Deck\Listeners\BoardCreatedListener;
 use OCA\Deck\Event\BoardUpdatedEvent;
 use OCA\Deck\Event\CardCreatedEvent;
 use OCA\Deck\Event\CardDeletedEvent;
@@ -156,7 +154,6 @@ class Application extends App implements IBootstrap {
 		// Event listening for realtime updates via notify_push
 		$context->registerEventListener(SessionCreatedEvent::class, LiveUpdateListener::class);
 		$context->registerEventListener(SessionClosedEvent::class, LiveUpdateListener::class);
-		$context->registerEventListener(BoardCreatedEvent::class, BoardCreatedListener::class);
 		$context->registerEventListener(BoardUpdatedEvent::class, LiveUpdateListener::class);
 		$context->registerEventListener(CardCreatedEvent::class, LiveUpdateListener::class);
 		$context->registerEventListener(CardUpdatedEvent::class, LiveUpdateListener::class);
