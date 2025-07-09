@@ -3,39 +3,41 @@
   - SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 <template>
-	<NcAppNavigationItem v-if="!editing"
-		:name="t('deck', 'Add board')"
-		icon="icon-add"
-		@click.prevent.stop="startCreateBoard" />
-	<div v-else class="board-create">
-		<NcColorPicker v-model="color" class="app-navigation-entry-bullet-wrapper" :disabled="loading">
-			<div :style="{ backgroundColor: color }" class="color0 icon-colorpicker app-navigation-entry-bullet" />
-		</NcColorPicker>
-		<form @submit.prevent.stop="createBoard">
-			<NcTextField ref="inputField"
-				:disable="loading"
-				:value.sync="value"
-				:placeholder="t('deck', 'Board name')"
-				type="text"
-				required />
-			<NcButton type="tertiary"
-				:disabled="loading"
-				:title="t('deck', 'Cancel edit')"
-				@click.stop.prevent="cancelEdit">
-				<template #icon>
-					<CloseIcon :size="20" />
-				</template>
-			</NcButton>
-			<NcButton type="tertiary"
-				native-type="submit"
-				:disabled="loading"
-				:title="t('deck', 'Save board')">
-				<template #icon>
-					<CheckIcon v-if="!loading" :size="20" />
-					<NcLoadingIcon v-else :size="20" />
-				</template>
-			</NcButton>
-		</form>
+	<div v-if="isAdmin">
+		<NcAppNavigationItem v-if="!editing"
+			:name="t('deck', 'Add board')"
+			icon="icon-add"
+			@click.prevent.stop="startCreateBoard" />
+		<div v-else class="board-create">
+			<NcColorPicker v-model="color" class="app-navigation-entry-bullet-wrapper" :disabled="loading">
+				<div :style="{ backgroundColor: color }" class="color0 icon-colorpicker app-navigation-entry-bullet" />
+			</NcColorPicker>
+			<form @submit.prevent.stop="createBoard">
+				<NcTextField ref="inputField"
+					:disable="loading"
+					:value.sync="value"
+					:placeholder="t('deck', 'Board name')"
+					type="text"
+					required />
+				<NcButton type="tertiary"
+					:disabled="loading"
+					:title="t('deck', 'Cancel edit')"
+					@click.stop.prevent="cancelEdit">
+					<template #icon>
+						<CloseIcon :size="20" />
+					</template>
+				</NcButton>
+				<NcButton type="tertiary"
+					native-type="submit"
+					:disabled="loading"
+					:title="t('deck', 'Save board')">
+					<template #icon>
+						<CheckIcon v-if="!loading" :size="20" />
+						<NcLoadingIcon v-else :size="20" />
+					</template>
+				</NcButton>
+			</form>
+		</div>
 	</div>
 </template>
 
@@ -44,6 +46,7 @@ import { NcButton, NcColorPicker, NcAppNavigationItem, NcLoadingIcon, NcTextFiel
 import CheckIcon from 'vue-material-design-icons/Check.vue'
 import CloseIcon from 'vue-material-design-icons/Close.vue'
 import { showError, showSuccess } from '@nextcloud/dialogs';
+import { getCurrentUser } from '@nextcloud/auth';
 
 /**
  *
@@ -68,6 +71,11 @@ export default {
 			editing: false,
 			loading: false,
 			color: randomColor(),
+		}
+	},
+	computed: {
+		isAdmin() {
+			return !!getCurrentUser()?.isAdmin;
 		}
 	},
 	methods: {

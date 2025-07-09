@@ -195,14 +195,14 @@ class BoardService {
 			throw new NoPermissionException('Creating boards has been disabled for your account.');
 		}
 
-		$subscription = $this->groupSubscriptionMapper->findByUserId($userId);
-		if (!$subscription) {
-			throw new NoPermissionException('No subscription found for this user');
-		}
+		// $subscription = $this->groupSubscriptionMapper->findByUserId($userId);
+		// if (!$subscription) {
+		// 	throw new NoPermissionException('No subscription found for this user');
+		// }
 
-		if($subscription->getCurrentBoardCount() >= $subscription->getProjectsLimit()) {
-			throw new NoPermissionException('Your board limit is reached please updgrade your plan');
-		}
+		// if($subscription->getCurrentBoardCount() >= $subscription->getProjectsLimit()) {
+		// 	throw new NoPermissionException('Your board limit is reached please updgrade your plan');
+		// }
 
 		$board = new Board();
 		$board->setTitle($title);
@@ -210,7 +210,7 @@ class BoardService {
 		$board->setColor($color);
 		$new_board = $this->boardMapper->insert($board);
 		
-		$this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), 1);
+		// $this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), 1);
 		
 		// create default stacks
 		$default_stacks = [
@@ -273,14 +273,14 @@ class BoardService {
 		
 		$this->permissionService->checkPermission($this->boardMapper, $id, Acl::PERMISSION_MANAGE);
 		
-		$subscription = $this->groupSubscriptionMapper->findByUserId($this->userId);
+		// $subscription = $this->groupSubscriptionMapper->findByUserId($this->userId);
 		$board = $this->find($id);
 		if ($board->getDeletedAt() > 0) {
 			throw new BadRequestException('This board has already been deleted');
 		}
 		$board->setDeletedAt(time());
 		$board = $this->boardMapper->update($board);
-		$this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), -1);
+		// $this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), -1);
 		
 		$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_BOARD, $board, ActivityManager::SUBJECT_BOARD_DELETE);
 		$this->changeHelper->boardChanged($board->getId());
