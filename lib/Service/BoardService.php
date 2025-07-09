@@ -589,6 +589,8 @@ class BoardService {
 			$this->cloneCards($board, $newBoard, $withAssignments, $withLabels, $withDueDate, $moveCardsToLeftStack, $restoreArchivedCards);
 		}
 
+		$this->eventDispatcher->dispatchTyped(new BoardCreatedEvent($board->getId()));
+		
 		return $this->find($newBoard->getId());
 	}
 
