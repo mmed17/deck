@@ -211,9 +211,7 @@ class BoardService {
 		$board->setOwner($userId);
 		$board->setColor($color);
 		$new_board = $this->boardMapper->insert($board);
-		
-		$this->eventDispatcher->dispatchTyped(new BoardCreatedEvent($board));
-
+	
 		// $this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), 1);
 		
 		// create default stacks
@@ -257,8 +255,11 @@ class BoardService {
 			'PERMISSION_MANAGE' => $permissions[Acl::PERMISSION_MANAGE] ?? false,
 			'PERMISSION_SHARE' => $permissions[Acl::PERMISSION_SHARE] ?? false
 		]);
+
 		$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_BOARD, $new_board, ActivityManager::SUBJECT_BOARD_CREATE, [], $userId);
 		$this->changeHelper->boardChanged($new_board->getId());
+
+		$this->eventDispatcher->dispatchTyped(new BoardCreatedEvent($board->getId()));
 
 		return $new_board;
 	}
@@ -284,14 +285,15 @@ class BoardService {
 		}
 		$board->setDeletedAt(time());
 		$board = $this->boardMapper->update($board);
-
-		$this->eventDispatcher->dispatchTyped(new BoardDeletedEvent($id));
-
+		
+		
 		// $this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), -1);
 		
 		$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_BOARD, $board, ActivityManager::SUBJECT_BOARD_DELETE);
 		$this->changeHelper->boardChanged($board->getId());
 
+		$this->eventDispatcher->dispatchTyped(new BoardDeletedEvent($id));
+		
 		return $board;
 	}
 

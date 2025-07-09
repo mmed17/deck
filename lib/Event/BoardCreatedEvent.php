@@ -2,18 +2,17 @@
 
 namespace OCA\Deck\Event;
 
-use OCA\Deck\Db\Board;
 use OCP\EventDispatcher\Event;
 
 class BoardCreatedEvent extends Event {
-    private Board $board;
+    private int $boardId;
 
-    public function __construct(Board $board) {
+    public function __construct(int $boardId) {
         parent::__construct();
-        $this->board = $board;
+        $this->boardId = $boardId;
     }
 
-    public function getBoard(): Board {
-        return $this->board;
+    public function getBoardId(): int {
+        return $this->boardId;
     }
 }
