@@ -45,6 +45,7 @@ class BoardController extends ApiController {
 	}
 
 	/**
+	 * 
 	 * @param $title
 	 * @param $color
 	 * @return \OCP\AppFramework\Db\Entity
