@@ -14,8 +14,10 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /** @template-extends DeckMapper<Label> */
-class LabelMapper extends DeckMapper implements IPermissionMapper {
-	public function __construct(IDBConnection $db) {
+class LabelMapper extends DeckMapper implements IPermissionMapper
+{
+	public function __construct(IDBConnection $db)
+	{
 		parent::__construct($db, 'deck_labels', Label::class);
 	}
 
@@ -26,7 +28,8 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 	 * @return Label[]
 	 * @throws \OCP\DB\Exception
 	 */
-	public function findAll($boardId, $limit = null, $offset = null): array {
+	public function findAll($boardId, $limit = null, $offset = null): array
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')
 			->from($this->getTableName())
@@ -36,7 +39,34 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 		return $this->findEntities($qb);
 	}
 
-	public function delete(Entity $entity): Entity {
+	/**
+	 * Find all labels for multiple boards in a single query
+	 * 
+	 * @param array $boardIds Array of board IDs
+	 * @return Label[] All labels for the given boards
+	 */
+	public function findAllForBoards(array $boardIds): array
+	{
+		if (empty($boardIds)) {
+			return [];
+		}
+
+		$boardIds = array_unique(array_map('intval', $boardIds));
+
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->in('board_id', $qb->createNamedParameter($boardIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->orderBy('board_id')
+			->addOrderBy('title');
+
+		return $this->findEntities($qb);
+	}
+
+
+
+	public function delete(Entity $entity): Entity
+	{
 		// delete assigned labels
 		$this->deleteLabelAssignments($entity->getId());
 		// delete label
@@ -50,7 +80,8 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 	 * @return Label[]
 	 * @throws \OCP\DB\Exception
 	 */
-	public function findAssignedLabelsForCard($cardId, $limit = null, $offset = null): array {
+	public function findAssignedLabelsForCard($cardId, $limit = null, $offset = null): array
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('l.*', 'card_id')
 			->from($this->getTableName(), 'l')
@@ -63,7 +94,8 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 		return $this->findEntities($qb);
 	}
 
-	public function findAssignedLabelsForCards($cardIds, $limit = null, $offset = null): array {
+	public function findAssignedLabelsForCards($cardIds, $limit = null, $offset = null): array
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('l.*', 'card_id')
 			->from($this->getTableName(), 'l')
@@ -83,7 +115,8 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 	 * @return Label[]
 	 * @throws \OCP\DB\Exception
 	 */
-	public function findAssignedLabelsForBoard($boardId, $limit = null, $offset = null): array {
+	public function findAssignedLabelsForBoard($boardId, $limit = null, $offset = null): array
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('l.id as id', 'l.title as title', 'l.color as color')
 			->selectAlias('c.id', 'card_id')
@@ -98,14 +131,16 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 		return $this->findEntities($qb);
 	}
 
-	public function insert(Entity $entity): Entity {
+	public function insert(Entity $entity): Entity
+	{
 		if (!in_array('lastModified', $entity->getUpdatedFields())) {
 			$entity->setLastModified(time());
 		}
 		return parent::insert($entity);
 	}
 
-	public function update(Entity $entity, bool $updateModified = true): Entity {
+	public function update(Entity $entity, bool $updateModified = true): Entity
+	{
 		if ($updateModified) {
 			$entity->setLastModified(time());
 		}
@@ -117,7 +152,8 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 	 * @return array
 	 * @throws \OCP\DB\Exception
 	 */
-	public function getAssignedLabelsForBoard($boardId) {
+	public function getAssignedLabelsForBoard($boardId)
+	{
 		$labels = $this->findAssignedLabelsForBoard($boardId);
 		$result = [];
 		foreach ($labels as $label) {
@@ -134,7 +170,8 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 	 * @return void
 	 * @throws \OCP\DB\Exception
 	 */
-	public function deleteLabelAssignments($labelId) {
+	public function deleteLabelAssignments($labelId)
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete('deck_assigned_labels')
 			->where($qb->expr()->eq('label_id', $qb->createNamedParameter($labelId, IQueryBuilder::PARAM_INT)));
@@ -146,7 +183,8 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 	 * @return void
 	 * @throws \OCP\DB\Exception
 	 */
-	public function deleteLabelAssignmentsForCard($cardId) {
+	public function deleteLabelAssignmentsForCard($cardId)
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete('deck_assigned_labels')
 			->where($qb->expr()->eq('card_id', $qb->createNamedParameter($cardId, IQueryBuilder::PARAM_INT)));
@@ -159,7 +197,8 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 	 * @return bool
 	 * @throws \OCP\DB\Exception
 	 */
-	public function isOwner($userId, $labelId): bool {
+	public function isOwner($userId, $labelId): bool
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('l.id')
 			->from($this->getTableName(), 'l')
@@ -174,7 +213,8 @@ class LabelMapper extends DeckMapper implements IPermissionMapper {
 	 * @param numeric $id
 	 * @return int|null
 	 */
-	public function findBoardId($id): ?int {
+	public function findBoardId($id): ?int
+	{
 		try {
 			$entity = $this->find($id);
 			return $entity->getBoardId();

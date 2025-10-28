@@ -18,7 +18,8 @@ use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
 
 /** @template-extends QBMapper<Board> */
-class BoardMapper extends QBMapper implements IPermissionMapper {
+class BoardMapper extends QBMapper implements IPermissionMapper
+{
 	/** @var CappedMemoryCache<Board[]> */
 	private CappedMemoryCache $userBoardCache;
 	/** @var CappedMemoryCache<Board> */
@@ -48,8 +49,9 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws DoesNotExistException
 	 */
-	public function find(int $id, bool $withLabels = false, bool $withAcl = false, bool $allowDeleted = false): Board {
-		$cacheKey = (string)$id;
+	public function find(int $id, bool $withLabels = false, bool $withAcl = false, bool $allowDeleted = false): Board
+	{
+		$cacheKey = (string) $id;
 		if (!isset($this->boardCache[$cacheKey])) {
 			$qb = $this->db->getQueryBuilder();
 			$deletedWhere = $allowDeleted ? $qb->expr()->gte('deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)) : $qb->expr()->eq('deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT));
@@ -58,7 +60,7 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 				->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 				->andWhere($deletedWhere)
 				->orderBy('id');
-			$this->boardCache[(string)$id] = $this->findEntity($qb);
+			$this->boardCache[(string) $id] = $this->findEntity($qb);
 		}
 
 		// Add labels
@@ -75,8 +77,118 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 
 		return $this->boardCache[$cacheKey];
 	}
+	/**
+	 * Find multiple boards by IDs in a single optimized query
+	 * 
+	 * @param array $ids Board IDs to fetch
+	 * @param bool $withLabels Whether to include labels
+	 * @param bool $withAcl Whether to include ACL
+	 * @param bool $allowDeleted Whether to allow deleted boards
+	 * @return Board[] Array of boards indexed by board ID
+	 */
+	public function findMultiple(array $ids, bool $withLabels = false, bool $withAcl = false, bool $allowDeleted = false): array
+	{
+		if (empty($ids)) {
+			return [];
+		}
 
-	public function findBoardIds(string $userId): array {
+		// Deduplicate and ensure integers
+		$ids = array_unique(array_map('intval', $ids));
+
+		// Check cache first
+		$boards = [];
+		$missingIds = [];
+
+		foreach ($ids as $id) {
+			$cacheKey = (string) $id;
+			if (isset($this->boardCache[$cacheKey])) {
+				$boards[$id] = $this->boardCache[$cacheKey];
+			} else {
+				$missingIds[] = $id;
+			}
+		}
+
+		// Fetch missing boards from database in one query
+		if (!empty($missingIds)) {
+			$qb = $this->db->getQueryBuilder();
+			$deletedWhere = $allowDeleted
+				? $qb->expr()->gte('deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))
+				: $qb->expr()->eq('deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT));
+
+			$qb->select('*')
+				->from('deck_boards')
+				->where($qb->expr()->in('id', $qb->createNamedParameter($missingIds, IQueryBuilder::PARAM_INT_ARRAY)))
+				->andWhere($deletedWhere)
+				->orderBy('id');
+
+			$fetchedBoards = $this->findEntities($qb);
+
+			// Update cache and result array
+			foreach ($fetchedBoards as $board) {
+				$boardId = $board->getId();
+				$cacheKey = (string) $boardId;
+				$this->boardCache[$cacheKey] = $board;
+				$boards[$boardId] = $board;
+			}
+		}
+
+		// Batch load labels if requested (single query for all boards)
+		if ($withLabels) {
+			$boardsNeedingLabels = array_filter($boards, fn($b) => $b->getLabels() === null);
+			if (!empty($boardsNeedingLabels)) {
+				$boardIdsForLabels = array_keys($boardsNeedingLabels);
+				$allLabels = $this->labelMapper->findAllForBoards($boardIdsForLabels);
+
+				// Group labels by board_id
+				$labelsByBoardId = [];
+				foreach ($allLabels as $label) {
+					$boardId = $label->getBoardId();
+					if (!isset($labelsByBoardId[$boardId])) {
+						$labelsByBoardId[$boardId] = [];
+					}
+					$labelsByBoardId[$boardId][] = $label;
+				}
+
+				// Assign labels to boards and update cache
+				foreach ($boardsNeedingLabels as $board) {
+					$boardId = $board->getId();
+					$board->setLabels($labelsByBoardId[$boardId] ?? []);
+					$this->boardCache[(string) $boardId] = $board;
+				}
+			}
+		}
+
+		// Batch load ACL if requested (single query for all boards)
+		if ($withAcl) {
+			$boardsNeedingAcl = array_filter($boards, fn($b) => $b->getAcl() === null);
+			if (!empty($boardsNeedingAcl)) {
+				$boardIdsForAcl = array_keys($boardsNeedingAcl);
+				$allAcl = $this->aclMapper->findAllForBoards($boardIdsForAcl);
+
+				// Group ACL by board_id
+				$aclByBoardId = [];
+				foreach ($allAcl as $acl) {
+					$boardId = $acl->getBoardId();
+					if (!isset($aclByBoardId[$boardId])) {
+						$aclByBoardId[$boardId] = [];
+					}
+					$aclByBoardId[$boardId][] = $acl;
+				}
+
+				// Assign ACL to boards and update cache
+				foreach ($boardsNeedingAcl as $board) {
+					$boardId = $board->getId();
+					$board->setAcl($aclByBoardId[$boardId] ?? []);
+					$this->boardCache[(string) $boardId] = $board;
+				}
+			}
+		}
+
+		return $boards;
+	}
+
+	public function findBoardIds(string $userId): array
+	{
 		// Owned by the user
 		$qb = $this->db->getQueryBuilder();
 		$qb->selectDistinct('b.id')
@@ -86,7 +198,7 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 			));
 		$result = $qb->executeQuery();
 		$ownerBoards = array_map(function (string $id) {
-			return (int)$id;
+			return (int) $id;
 		}, $result->fetchAll(\PDO::FETCH_COLUMN));
 		$result->closeCursor();
 
@@ -121,16 +233,16 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 
 		$result = $qb->executeQuery();
 		$sharedBoards = array_map(function (string $id) {
-			return (int)$id;
+			return (int) $id;
 		}, $result->fetchAll(\PDO::FETCH_COLUMN));
 		$result->closeCursor();
 		return array_unique(array_merge($ownerBoards, $sharedBoards));
 	}
 
 	public function findAllForUser(
-		string $userId, 
-		?int $since = null, 
-		bool $includeArchived = true, 
+		string $userId,
+		?int $since = null,
+		bool $includeArchived = true,
 		?int $before = null,
 		?string $term = null
 	): array {
@@ -142,12 +254,12 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 				$this->userManager->get($userId)
 			);
 			$userBoards = $this->findAllByUser(
-				$userId, 
+				$userId,
 				null,
-				null, 
-				$since, 
-				$includeArchived, 
-				$before, 
+				null,
+				$since,
+				$includeArchived,
+				$before,
 				$term
 			);
 			$groupBoards = $this->findAllByGroups($userId, $groups, null, null, $since, $includeArchived, $before, $term);
@@ -177,12 +289,19 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		}
 		return $this->userBoardCache[$userId];
 	}
-	
+
 	/**
 	 * Find all boards for a given user
 	 */
-	public function findAllByUser(string $userId, ?int $limit = null, ?int $offset = null, ?int $since = null,
-		bool $includeArchived = true, ?int $before = null, ?string $term = null): array {
+	public function findAllByUser(
+		string $userId,
+		?int $limit = null,
+		?int $offset = null,
+		?int $since = null,
+		bool $includeArchived = true,
+		?int $before = null,
+		?string $term = null
+	): array {
 		// FIXME this used to be a UNION to get boards owned by $userId and the user shares in one single query
 		// Is it possible with the query builder?
 		$qb = $this->db->getQueryBuilder();
@@ -270,7 +389,8 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		return $entries;
 	}
 
-	public function findAllByOwner(string $userId, ?int $limit = null, ?int $offset = null) {
+	public function findAllByOwner(string $userId, ?int $limit = null, ?int $offset = null)
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')
 			->from('deck_boards')
@@ -288,8 +408,16 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 	/**
 	 * Find all boards for a given user
 	 */
-	public function findAllByGroups(string $userId, array $groups, ?int $limit = null, ?int $offset = null, ?int $since = null,
-		bool $includeArchived = true, ?int $before = null, ?string $term = null): array {
+	public function findAllByGroups(
+		string $userId,
+		array $groups,
+		?int $limit = null,
+		?int $offset = null,
+		?int $since = null,
+		bool $includeArchived = true,
+		?int $before = null,
+		?string $term = null
+	): array {
 		if (count($groups) <= 0) {
 			return [];
 		}
@@ -342,8 +470,15 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		return $entries;
 	}
 
-	public function findAllByCircles(string $userId, ?int $limit = null, ?int $offset = null, ?int $since = null,
-		bool $includeArchived = true, ?int $before = null, ?string $term = null) {
+	public function findAllByCircles(
+		string $userId,
+		?int $limit = null,
+		?int $offset = null,
+		?int $since = null,
+		bool $includeArchived = true,
+		?int $before = null,
+		?string $term = null
+	) {
 		$circles = $this->circlesService->getUserCircles($userId);
 		if (count($circles) === 0) {
 			return [];
@@ -398,7 +533,8 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		return $entries;
 	}
 
-	public function findAllByTeam(string $teamId): array {
+	public function findAllByTeam(string $teamId): array
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('b.id', 'title', 'owner', 'color', 'archived', 'deleted_at', 'last_modified')
 			->from('deck_boards', 'b')
@@ -412,7 +548,8 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		return $entries;
 	}
 
-	public function findTeamsForBoard(int $boardId): array {
+	public function findTeamsForBoard(int $boardId): array
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('acl.participant')
 			->from('deck_boards', 'b')
@@ -426,7 +563,8 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		}, $result->fetchAll());
 	}
 
-	public function isSharedWithTeam(int $boardId, string $teamId): bool {
+	public function isSharedWithTeam(int $boardId, string $teamId): bool
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('b.id', 'title', 'owner', 'color', 'archived', 'deleted_at', 'last_modified')
 			->from('deck_boards', 'b')
@@ -448,7 +586,8 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 	 * @param int $boardId
 	 * @return bool
 	 */
-	public function isShared(int $boardId): bool {
+	public function isShared(int $boardId): bool
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('b.id')
 			->from('deck_boards', 'b')
@@ -463,14 +602,16 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		return false;
 	}
 
-	public function findAll(): array {
+	public function findAll(): array
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('id')
 			->from('deck_boards');
 		return $this->findEntities($qb);
 	}
 
-	public function findToDelete() {
+	public function findToDelete()
+	{
 		// add buffer of 5 min
 		$timeLimit = time() - (60 * 5);
 		$qb = $this->db->getQueryBuilder();
@@ -482,7 +623,8 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 	}
 
 	public function delete(/** @noinspection PhpUnnecessaryFullyQualifiedNameInspection */
-		\OCP\AppFramework\Db\Entity $entity): \OCP\AppFramework\Db\Entity {
+		\OCP\AppFramework\Db\Entity $entity
+	): \OCP\AppFramework\Db\Entity {
 		// delete acl
 		$acl = $this->aclMapper->findAll($entity->getId());
 		foreach ($acl as $item) {
@@ -503,16 +645,19 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 		return parent::delete($entity);
 	}
 
-	public function isOwner($userId, $id): bool {
+	public function isOwner($userId, $id): bool
+	{
 		$board = $this->find($id);
 		return ($board->getOwner() === $userId);
 	}
 
-	public function findBoardId($id): ?int {
+	public function findBoardId($id): ?int
+	{
 		return $id;
 	}
 
-	public function mapAcl(Acl &$acl) {
+	public function mapAcl(Acl &$acl)
+	{
 		$acl->resolveRelation('participant', function ($participant) use (&$acl) {
 			if ($acl->getType() === Acl::PERMISSION_TYPE_USER) {
 				if ($this->userManager->userExists($acl->getParticipant())) {
@@ -551,7 +696,8 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 	/**
 	 * @param Board $board
 	 */
-	public function mapOwner(Board &$board) {
+	public function mapOwner(Board &$board)
+	{
 		$userManager = $this->userManager;
 		$board->resolveRelation('owner', function ($owner) use (&$userManager) {
 			if ($this->userManager->userExists($owner)) {
@@ -564,7 +710,8 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 	/**
 	 * @throws \OCP\DB\Exception
 	 */
-	public function transferOwnership(string $ownerId, string $newOwnerId, $boardId = null): void {
+	public function transferOwnership(string $ownerId, string $newOwnerId, $boardId = null): void
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->update('deck_boards')
 			->set('owner', $qb->createNamedParameter($newOwnerId, IQueryBuilder::PARAM_STR))
@@ -578,7 +725,8 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 	/**
 	 * Reset cache for a given board or a given user
 	 */
-	public function flushCache(?int $boardId = null, ?string $userId = null) {
+	public function flushCache(?int $boardId = null, ?string $userId = null)
+	{
 		if ($boardId) {
 			unset($this->boardCache[$boardId]);
 		} else {

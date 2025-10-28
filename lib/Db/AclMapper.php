@@ -13,8 +13,10 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /** @template-extends DeckMapper<Acl> */
-class AclMapper extends DeckMapper implements IPermissionMapper {
-	public function __construct(IDBConnection $db) {
+class AclMapper extends DeckMapper implements IPermissionMapper
+{
+	public function __construct(IDBConnection $db)
+	{
 		parent::__construct($db, 'deck_board_acl', Acl::class);
 	}
 
@@ -25,7 +27,8 @@ class AclMapper extends DeckMapper implements IPermissionMapper {
 	 * @return Acl[]
 	 * @throws \OCP\DB\Exception
 	 */
-	public function findAll($boardId, $limit = null, $offset = null) {
+	public function findAll($boardId, $limit = null, $offset = null)
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('id', 'board_id', 'type', 'participant', 'permission_edit', 'permission_share', 'permission_manage')
 			->from('deck_board_acl')
@@ -35,8 +38,31 @@ class AclMapper extends DeckMapper implements IPermissionMapper {
 
 		return $this->findEntities($qb);
 	}
+	/**
+	 * Find all ACL entries for multiple boards in a single query
+	 * 
+	 * @param array $boardIds Array of board IDs
+	 * @return Acl[] All ACL entries for the given boards
+	 */
+	public function findAllForBoards(array $boardIds): array
+	{
+		if (empty($boardIds)) {
+			return [];
+		}
 
-	public function findIn(array $boardIds, ?int $limit = null, ?int $offset = null): array {
+		$boardIds = array_unique(array_map('intval', $boardIds));
+
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id', 'board_id', 'type', 'participant', 'permission_edit', 'permission_share', 'permission_manage')
+			->from('deck_board_acl')
+			->where($qb->expr()->in('board_id', $qb->createNamedParameter($boardIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->orderBy('board_id');
+
+		return $this->findEntities($qb);
+	}
+
+	public function findIn(array $boardIds, ?int $limit = null, ?int $offset = null): array
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('id', 'board_id', 'type', 'participant', 'permission_edit', 'permission_share', 'permission_manage')
 			->from('deck_board_acl')
@@ -56,7 +82,8 @@ class AclMapper extends DeckMapper implements IPermissionMapper {
 	 * @return bool
 	 * @throws \OCP\DB\Exception
 	 */
-	public function isOwner($userId, $id): bool {
+	public function isOwner($userId, $id): bool
+	{
 		$aclId = $id;
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('acl.id')
@@ -72,11 +99,12 @@ class AclMapper extends DeckMapper implements IPermissionMapper {
 	 * @param numeric $id
 	 * @return int|null
 	 */
-	public function findBoardId($id): ?int {
+	public function findBoardId($id): ?int
+	{
 		try {
 			$entity = $this->find($id);
 			return $entity->getBoardId();
-		} catch (DoesNotExistException|MultipleObjectsReturnedException $e) {
+		} catch (DoesNotExistException | MultipleObjectsReturnedException $e) {
 		}
 		return null;
 	}
@@ -87,7 +115,8 @@ class AclMapper extends DeckMapper implements IPermissionMapper {
 	 * @return Acl[]
 	 * @throws \OCP\DB\Exception
 	 */
-	public function findByParticipant($type, $participant): array {
+	public function findByParticipant($type, $participant): array
+	{
 		$qb = $this->db->getQueryBuilder();
 
 		$qb->select('*')
@@ -101,7 +130,8 @@ class AclMapper extends DeckMapper implements IPermissionMapper {
 	/**
 	 * @throws \OCP\DB\Exception
 	 */
-	public function deleteParticipantFromBoard(int $boardId, int $type, string $participant): void {
+	public function deleteParticipantFromBoard(int $boardId, int $type, string $participant): void
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete('deck_board_acl')
 			->where($qb->expr()->eq('type', $qb->createNamedParameter($type, IQueryBuilder::PARAM_INT)))
@@ -110,7 +140,8 @@ class AclMapper extends DeckMapper implements IPermissionMapper {
 		$qb->executeStatement();
 	}
 
-	public function findByType(int $type): array {
+	public function findByType(int $type): array
+	{
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')
 			->from('deck_board_acl')
