@@ -76,7 +76,7 @@ class StackService
 		$this->stackServiceValidator = $stackServiceValidator;
 	}
 
-	private function enrichStackWithCards($userId, $stack, $isOwner, $since = -1)
+	private function enrichStackWithCards($userId, $stack, $isOwner, $board, $since = -1)
 	{
 		$cards = [];
 
@@ -101,7 +101,7 @@ class StackService
 			return;
 		}
 
-		$stack->setCards($this->cardService->enrichCards($cards));
+		$stack->setCards($this->cardService->batchEnrichCards($cards, $stack, $board));
 	}
 
 	private function enrichStacksWithCards($userId, $stacks, $board, $since = -1)
@@ -111,7 +111,7 @@ class StackService
 			$isOwner = true;
 		}
 		foreach ($stacks as $stack) {
-			$this->enrichStackWithCards($userId, $stack, $isOwner, $since);
+			$this->enrichStackWithCards($userId, $stack,  $isOwner, $board, $since);
 		}
 	}
 

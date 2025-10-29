@@ -13,6 +13,7 @@ use OCA\Deck\BadRequestException;
 use OCA\Deck\Db\Acl;
 use OCA\Deck\Db\Assignment;
 use OCA\Deck\Db\AssignmentMapper;
+use OCA\Deck\Db\Board;
 use OCA\Deck\Db\BoardMapper;
 use OCA\Deck\Db\Card;
 use OCA\Deck\Db\CardMapper;
@@ -69,7 +70,7 @@ class CardService {
 	public function enrichCards($cards) {
 		$user = $this->userManager->get($this->userId);
 
-		$cardIds = array_map(function (Card $card) use ($user) {
+		$cardIds = array_map(function (Card $card) use ($user) { 
 			// Everything done in here might be heavy as it is executed for every card
 			$cardId = $card->getId();
 			$this->cardMapper->mapOwner($card);
@@ -128,6 +129,83 @@ class CardService {
 			},
 			$cards
 		);
+	}
+
+	public function batchEnrichCards($cards, $stack, Board $board) {
+		if (empty($cards)) {
+				return [];
+			}
+
+			$user = $this->userManager->get($this->userId);
+			$cardIds = array_map(fn(Card $card) => $card->getId(), $cards);
+
+			// Step 1: Fetch common objects once (Project)
+			// The Stack and Board are now passed in, so we just need the project.
+			$project = $this->projectMapper->findByBoardId($board->getId());
+
+			// Step 2: Batch fetch all card-specific data
+			$attachmentCounts = $this->attachmentService->countBatch($cardIds); // Assumes a batch method exists
+			$commentCounts = $this->commentsManager->getNumberOfCommentsForObjects('deckCard', $cardIds);
+			$unreadCommentCounts = $this->commentsManager->getNumberOfUnreadCommentsForObjects('deckCard', $cardIds, $user); // Assumes a batch method exists
+
+			$assignedLabels = $this->labelMapper->findAssignedLabelsForCards($cardIds);
+			$assignedUsers = $this->assignedUsersMapper->findIn($cardIds);
+
+			// Step 3: Organize batched data into maps for efficient O(1) lookups
+			$labelsByCardId = [];
+			foreach ($assignedLabels as $label) {
+				$labelsByCardId[$label->getCardId()][] = $label;
+			}
+
+			$usersByCardId = [];
+			foreach ($assignedUsers as $assignment) {
+				$usersByCardId[$assignment->getCardId()][] = $assignment;
+			}
+
+			// Step 4: Enrich each card using the pre-fetched data
+			foreach ($cards as $card) {
+				$cardId = $card->getId();
+
+				// Set the common objects directly from the function parameters
+				$card->setRelatedStack($stack);
+				$card->setRelatedBoard($board);
+				if ($project !== null) {
+					$card->setProject($project);
+				}
+
+				// Set card-specific data from our pre-fetched maps
+				$card->setAttachmentCount($attachmentCounts[$cardId] ?? 0);
+				$card->setCommentsCount($commentCounts[$cardId] ?? 0);
+				$card->setCommentsUnread($unreadCommentCounts[$cardId] ?? 0);
+				$card->setLabels($labelsByCardId[$cardId] ?? []);
+				$card->setAssignedUsers($usersByCardId[$cardId] ?? []);
+
+				// This lazy-load operation is acceptable as it's efficient.
+				$this->cardMapper->mapOwner($card);
+			}
+
+			// Step 5: Final mapping to CardDetails
+			return array_map(
+				function (Card $card): CardDetails {
+					$cardDetails = new CardDetails($card);
+
+					// TODO: Consider batching reference resolution if it becomes a bottleneck
+					$references = $this->referenceManager->extractReferences($card->getTitle());
+					$reference = array_shift($references);
+					if ($reference) {
+						$referenceData = $this->referenceManager->resolveReference($reference);
+						$cardDetails->setReferenceData($referenceData);
+					}
+
+					if ($card->getProject() !== null) {
+						$cardDetails->setProject($card->getProject());
+					}
+
+					return $cardDetails;
+				},
+				$cards
+			);
+
 	}
 
 	public function fetchDeleted($boardId) {

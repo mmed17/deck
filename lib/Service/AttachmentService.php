@@ -168,6 +168,133 @@ class AttachmentService {
 		return $count;
 	}
 
+	public function countBatch(array $cardIds): array {
+		if (empty($cardIds)) {
+			return [];
+		}
+		
+		// Validate all IDs
+		foreach ($cardIds as $cardId) {
+			if (is_numeric($cardId) === false) {
+				throw new BadRequestException('card id must be a number');
+			}
+		}
+		
+		// Normalize to integers
+		$cardIds = array_map('intval', $cardIds);
+		
+		// Check cache for all cards
+		$counts = [];
+		$uncachedCardIds = [];
+		
+		foreach ($cardIds as $cardId) {
+			$cachedCount = $this->attachmentCacheHelper->getAttachmentCount($cardId);
+			if ($cachedCount !== null) {
+				$counts[$cardId] = $cachedCount;
+			} else {
+				$uncachedCardIds[] = $cardId;
+			}
+		}
+		
+		// If all cached, return early
+		if (empty($uncachedCardIds)) {
+			return $counts;
+		}
+		
+		// Batch fetch regular attachments
+		$regularCounts = $this->attachmentMapper->countByCardIdsBatch($uncachedCardIds);
+		
+		// Batch fetch custom attachments
+		foreach (array_keys($this->services) as $attachmentType) {
+			$service = $this->getService($attachmentType);
+			if ($service instanceof ICustomAttachmentService) {
+				// Check if service supports batch counting
+				if (method_exists($service, 'getAttachmentCountsBatch')) {
+					$customCounts = $service->getAttachmentCountsBatch($uncachedCardIds);
+					foreach ($customCounts as $cardId => $count) {
+						$regularCounts[$cardId] = ($regularCounts[$cardId] ?? 0) + $count;
+					}
+				} else {
+					// Fallback to single calls if batch not supported
+					foreach ($uncachedCardIds as $cardId) {
+						$customCount = $service->getAttachmentCount($cardId);
+						$regularCounts[$cardId] = ($regularCounts[$cardId] ?? 0) + $customCount;
+					}
+				}
+			}
+		}
+		
+		// Cache and merge results
+		foreach ($uncachedCardIds as $cardId) {
+			$count = $regularCounts[$cardId] ?? 0;
+			$this->attachmentCacheHelper->setAttachmentCount($cardId, $count);
+			$counts[$cardId] = $count;
+		}
+		
+		return $counts;
+}
+
+
+	/**
+ * Gets the total attachment count for multiple cards in a batch operation.
+ * It checks the cache first, then fetches any missing counts from all sources.
+ *
+ * @param int[] $cardIds
+ * @return array An associative array mapping cardId to its total attachment count.
+ */
+	public function getCounts(array $cardIds): array {
+		if (empty($cardIds)) {
+			return [];
+		}
+		$cardIds = array_map('int', array_unique($cardIds));
+
+		// 1. Bulk-check the cache for already computed counts
+		$cachedCounts = $this->attachmentCacheHelper->getAttachmentCounts($cardIds);
+		$cardIdsToFetch = array_diff($cardIds, array_keys($cachedCounts));
+
+		// If all counts were found in the cache, return them immediately
+		if (empty($cardIdsToFetch)) {
+			return $cachedCounts;
+		}
+
+		// 2. Fetch missing counts from the database
+		$fetchedCounts = array_fill_keys($cardIdsToFetch, 0);
+
+		// a. Get counts from the primary attachment mapper
+		// This assumes your mapper has a batch method.
+		$mapperCounts = $this->attachmentMapper->findAllCounts($cardIdsToFetch);
+		foreach ($mapperCounts as $cardId => $count) {
+			$fetchedCounts[$cardId] += $count;
+		}
+
+		// b. Get counts from all custom attachment services
+		foreach (array_keys($this->services) as $attachmentType) {
+			$service = $this->getService($attachmentType);
+			if ($service instanceof ICustomAttachmentService) {
+				// Use the new batch method if it exists
+				if (method_exists($service, 'getAttachmentCounts')) {
+					$serviceCounts = $service->getAttachmentCounts($cardIdsToFetch);
+					foreach ($serviceCounts as $cardId => $count) {
+						$fetchedCounts[$cardId] += $count;
+					}
+				} else {
+					// Fallback for services that haven't been updated (less efficient)
+					foreach ($cardIdsToFetch as $cardId) {
+						$fetchedCounts[$cardId] += $service->getAttachmentCount($cardId);
+					}
+				}
+			}
+		}
+
+		// 3. Cache the newly fetched results for future requests
+		if (!empty($fetchedCounts)) {
+			$this->attachmentCacheHelper->setAttachmentCounts($fetchedCounts);
+		}
+
+		// 4. Merge the cached results with the newly fetched results and return
+		return $cachedCounts + $fetchedCounts;
+	}
+
 	/**
 	 * @param $cardId
 	 * @param $type

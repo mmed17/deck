@@ -121,6 +121,85 @@ class FilesAppService implements IAttachmentService, ICustomAttachmentService {
 		return $count;
 	}
 
+	public function getAttachmentCountsBatch(array $cardIds): array {
+		if (empty($cardIds)) {
+			return [];
+		}
+		
+		$qb = $this->connection->getQueryBuilder();
+		$qb->select('s.id', 's.share_with', 'f.fileid', 'f.path')
+			->selectAlias('st.id', 'storage_string_id')
+			->from('share', 's')
+			->leftJoin('s', 'filecache', 'f', $qb->expr()->eq('s.file_source', 'f.fileid'))
+			->leftJoin('f', 'storages', 'st', $qb->expr()->eq('f.storage', 'st.numeric_id'))
+			->where($qb->expr()->eq('s.share_type', $qb->createNamedParameter(IShare::TYPE_DECK)))
+			->andWhere($qb->expr()->in('s.share_with', $qb->createNamedParameter($cardIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->andWhere($qb->expr()->isNull('s.parent'))
+			->andWhere($qb->expr()->orX(
+				$qb->expr()->eq('s.item_type', $qb->createNamedParameter('file')),
+				$qb->expr()->eq('s.item_type', $qb->createNamedParameter('folder'))
+			));
+		
+		// Initialize all counts to 0
+		$counts = array_fill_keys($cardIds, 0);
+		$cursor = $qb->executeQuery();
+		
+		while ($data = $cursor->fetch()) {
+			if ($this->shareProvider->isAccessibleResult($data)) {
+				$cardId = (int)$data['share_with'];
+				$counts[$cardId]++;
+			}
+		}
+		$cursor->closeCursor();
+		
+		return $counts;
+   }
+
+	/**
+ * Gets attachment counts for multiple cards from shares.
+ *
+ * @param int[] $cardIds
+ * @return array An associative array mapping cardId to its count.
+ */
+	public function getAttachmentCounts(array $cardIds): array {
+		if (empty($cardIds)) {
+			return [];
+		}
+
+		$qb = $this->connection->getQueryBuilder();
+		// Select the card ID to group by, along with other necessary fields for the access check
+		$qb->select('s.share_with', 's.id', 'f.fileid', 'f.path')
+			->selectAlias('st.id', 'storage_string_id')
+			->from('share', 's')
+			->leftJoin('s', 'filecache', 'f', $qb->expr()->eq('s.file_source', 'f.fileid'))
+			->leftJoin('f', 'storages', 'st', $qb->expr()->eq('f.storage', 'st.numeric_id'))
+			->andWhere($qb->expr()->eq('s.share_type', $qb->createNamedParameter(IShare::TYPE_DECK)))
+			// This is the key change: use IN for batch fetching
+			->andWhere($qb->expr()->in('s.share_with', $qb->createNamedParameter($cardIds, \OCP\DB\IQueryBuilder::PARAM_INT_ARRAY)))
+			->andWhere($qb->expr()->isNull('s.parent'))
+			->andWhere($qb->expr()->orX(
+				$qb->expr()->eq('s.item_type', 'file'),
+				$qb->expr()->eq('s.item_type', 'folder')
+			));
+
+		// Initialize counts for all requested cards to 0 to ensure they are in the result array
+		$counts = array_fill_keys($cardIds, 0);
+
+		$cursor = $qb->executeQuery();
+		while ($data = $cursor->fetch()) {
+			// The accessibility check must be performed on each row before counting
+			if ($this->shareProvider->isAccessibleResult($data)) {
+				// Increment the count for the specific card ID from the row data
+				$counts[$data['share_with']]++;
+			}
+		}
+		$cursor->closeCursor();
+
+		return $counts;
+	}
+
+
+
 	public function extendData(Attachment $attachment) {
 		$userFolder = $this->rootFolder->getUserFolder($this->userId);
 		$share = $this->getShareForAttachment($attachment);
