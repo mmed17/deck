@@ -100,7 +100,7 @@ class StackService {
             return;
         }
 
-        $stack->setCards($this->cardService->enrichCards($cards));
+		$stack->setCards($this->cardService->enrichCards($cards, $stack));
 	}
 
 	private function enrichStacksWithCards($userId, $stacks, $since = -1) {
