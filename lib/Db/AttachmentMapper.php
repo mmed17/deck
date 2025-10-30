@@ -111,6 +111,44 @@ class AttachmentMapper extends DeckMapper implements IPermissionMapper {
 
 
 	/**
+	 * Count attachments for multiple cards in a single query
+	 *
+	 * @param array $cardIds Array of card IDs
+	 * @return array Array with cardId as key and count as value
+	 * @throws \OCP\DB\Exception
+	 */
+	public function countByCardIds(array $cardIds): array {
+		if (empty($cardIds)) {
+			return [];
+		}
+
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('card_id')
+			->selectAlias($qb->createFunction('COUNT(*)'), 'count')
+			->from($this->getTableName())
+			->where($qb->expr()->in('card_id', $qb->createNamedParameter($cardIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->andWhere($qb->expr()->eq('deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
+			->groupBy('card_id');
+
+		$result = $qb->executeQuery();
+		$counts = [];
+
+		while ($row = $result->fetch()) {
+			$counts[(int)$row['card_id']] = (int)$row['count'];
+		}
+		$result->closeCursor();
+
+		// Ensure all requested card IDs have an entry (even if count is 0)
+		foreach ($cardIds as $cardId) {
+			if (!isset($counts[$cardId])) {
+				$counts[$cardId] = 0;
+			}
+		}
+
+		return $counts;
+	}
+
+	/**
 	 * Check if $userId is owner of Entity with $id
 	 *
 	 * @param $userId string userId

@@ -48,8 +48,8 @@ use OCP\IURLGenerator;
 use OCP\Server;
 use Psr\Container\ContainerExceptionInterface;
 use Psr\Container\NotFoundExceptionInterface;
-use OCA\Provisioning_API\Db\GroupSubscriptionMapper;
-use OCA\Provisioning_API\Db\GroupSubscription;
+// use OCA\Provisioning_API\Db\GroupSubscriptionMapper;
+// use OCA\Provisioning_API\Db\GroupSubscription;
 
 class BoardService {
 	private ?array $boardsCacheFull = null;
@@ -75,7 +75,7 @@ class BoardService {
 		private BoardServiceValidator $boardServiceValidator,
 		private SessionMapper $sessionMapper,
 		private ?string $userId,
-		private GroupSubscriptionMapper $groupSubscriptionMapper,
+		// private GroupSubscriptionMapper $groupSubscriptionMapper,
 	) {}
 
 	/**
