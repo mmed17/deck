@@ -114,6 +114,19 @@ class CardService {
 			}
 		}
 
+		// Load all projects for the boards at once
+		$projects = [];
+		foreach (array_keys($boardIds) as $boardId) {
+			try {
+				$project = $this->projectMapper->findByBoardId($boardId);
+				if ($project !== null) {
+					$projects[$boardId] = $project;
+				}
+			} catch (\Exception $e) {
+				// Project not found, skip
+			}
+		}
+
 		// Collect card IDs and set relationships
 		$cardIds = [];
 		foreach ($cards as $card) {
@@ -128,6 +141,12 @@ class CardService {
 				$relatedBoard = $boards[$relatedStack->getBoardId()] ?? null;
 				if ($relatedBoard) {
 					$card->setRelatedBoard($relatedBoard);
+					
+					// Set project if exists for this board
+					$project = $projects[$relatedBoard->getId()] ?? null;
+					if ($project !== null) {
+						$card->setProject($project);
+					}
 				}
 			}
 		}
