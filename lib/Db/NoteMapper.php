@@ -79,4 +79,32 @@ class NoteMapper extends QBMapper {
     public function delete(Entity $note): Entity {
         return parent::delete($note);
     }
+
+    /**
+     * Get the latest notes for a specific BOARD and USER.
+     * Joins the notes with cards and stacks to filter by board_id.
+     * * @param int $boardId The Deck Board ID
+     * @param string $userId The current User ID
+     * @param int $limit Number of notes to return (default 5)
+     * @return Note[]
+     */
+    public function findLatestByBoard(int $boardId, string $userId, int $limit = 5): array {
+        $qb = $this->db->getQueryBuilder();
+        
+        $qb->select('n.*')
+            ->from($this->getTableName(), 'n')
+            // Join Cards table to link note -> card
+            ->innerJoin('n', 'deck_cards', 'c', 'n.card_id = c.id')
+            // Join Stacks table to link card -> board
+            ->innerJoin('c', 'deck_stacks', 's', 'c.stack_id = s.id')
+            // Filter by Board ID
+            ->where($qb->expr()->eq('s.board_id', $qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)))
+            // Filter by User ID
+            ->andWhere($qb->expr()->eq('n.user_id', $qb->createNamedParameter($userId)))
+            // Get the newest ones
+            ->orderBy('n.updated_at', 'DESC')
+            ->setMaxResults($limit);
+
+        return $this->findEntities($qb);
+    }
 }

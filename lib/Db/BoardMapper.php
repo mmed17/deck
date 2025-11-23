@@ -590,4 +590,52 @@ class BoardMapper extends QBMapper implements IPermissionMapper {
 			$this->userBoardCache = new CappedMemoryCache();
 		}
 	}
+
+	/**
+	 * Fetch latest comments for a specific board.
+	 *
+	 * @param int $boardId
+	 * @param int $limit
+	 * @return array
+	 */
+	public function findLatestByBoard(int $boardId, int $limit = 5): array {
+		$qb = $this->db->getQueryBuilder();
+
+		$qb->select('c.*', 'card.title as card_title', 'card.id as card_id')
+			->from('comments', 'c')
+			
+			// JOIN 1: Comments -> Cards
+			// We use a raw string for the condition to ensure proper casting
+			// and to prevent the builder from treating 'card.id' as a string literal.
+			->innerJoin(
+				'c', 
+				'deck_cards', 
+				'card', 
+				'c.object_id = CAST(card.id AS CHAR)' 
+			)
+			// JOIN 2: Cards -> Stacks
+			->innerJoin(
+				'card', 
+				'deck_stacks', 
+				'stack', 
+				'card.stack_id = stack.id'
+			)
+			// Filter by Board ID
+			->where($qb->expr()->eq(
+				'stack.board_id', 
+				$qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)
+			))
+
+			// Filter by Object Type (only deck_card comments)
+			->andWhere($qb->expr()->eq(
+				'c.object_type', 
+				$qb->createNamedParameter('deckCard')
+			))
+
+			// Sort by newest first
+			->orderBy('c.creation_timestamp', 'DESC')
+			->setMaxResults($limit);
+
+		return $qb->executeQuery()->fetchAll();
+	}
 }

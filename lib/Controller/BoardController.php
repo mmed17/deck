@@ -10,6 +10,8 @@ namespace OCA\Deck\Controller;
 use ErrorException;
 use OCA\Deck\Db\Acl;
 use OCA\Deck\Db\Board;
+use OCA\Deck\Db\BoardMapper;
+use OCA\Deck\Db\NoteMapper;
 use OCA\Deck\Service\BoardService;
 use OCA\Deck\Service\PermissionService;
 use OCP\AppFramework\ApiController;
@@ -23,7 +25,9 @@ class BoardController extends ApiController {
 		IRequest $request,
 		private BoardService $boardService,
 		private PermissionService $permissionService,
-		private $userId
+		private $userId,
+		private NoteMapper $noteMapper,
+		private BoardMapper $boardMapper,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -163,5 +167,29 @@ class BoardController extends ApiController {
 	 */
 	public function export($boardId) {
 		return $this->boardService->export($boardId);
+	}
+
+	/**
+     * @NoCSRFRequired
+     * @NoAdminRequired
+     *
+     * Retrieves the latest notes for the current user on a specific board.
+     * URL: /apps/deck/api/v1.0/boards/{boardId}/notes/latest (Example, depends on routes.php)
+     */
+	public function latestNotes(int $boardId, int $limit = 5): DataResponse {
+        $notes = $this->noteMapper->findLatestByBoard($boardId, $this->userId, $limit);
+        return new DataResponse($notes);
+    }
+
+	/**
+     * @NoCSRFRequired
+     * @NoAdminRequired
+     *
+     * Retrieves the latest comments for a specific board.
+     * URL: /apps/deck/api/v1.0/boards/{boardId}/comments/latest (Example, depends on routes.php)
+     */
+	public function latestComments(int $boardId, int $limit = 5): DataResponse {
+		$comments = $this->boardMapper->findLatestByBoard($boardId, $limit);
+		return new DataResponse($comments);
 	}
 }
