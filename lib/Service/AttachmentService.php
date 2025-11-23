@@ -169,6 +169,60 @@ class AttachmentService {
 	}
 
 	/**
+	 * Count attachments for multiple cards at once
+	 *
+	 * @param array $cardIds Array of card IDs
+	 * @return array Array with cardId as key and count as value
+	 * @throws InvalidAttachmentType
+	 * @throws \OCP\DB\Exception
+	 */
+	public function countByCardIds(array $cardIds): array {
+		if (empty($cardIds)) {
+			return [];
+		}
+
+		$counts = [];
+		$uncachedCardIds = [];
+
+		// Check cache first
+		foreach ($cardIds as $cardId) {
+			$cachedCount = $this->attachmentCacheHelper->getAttachmentCount((int)$cardId);
+			if ($cachedCount !== null) {
+				$counts[$cardId] = $cachedCount;
+			} else {
+				$uncachedCardIds[] = $cardId;
+			}
+		}
+
+		// If all counts are cached, return early
+		if (empty($uncachedCardIds)) {
+			return $counts;
+		}
+
+		// Batch query for uncached counts
+		$dbCounts = $this->attachmentMapper->countByCardIds($uncachedCardIds);
+
+		// Add custom attachment service counts
+		foreach (array_keys($this->services) as $attachmentType) {
+			$service = $this->getService($attachmentType);
+			if ($service instanceof ICustomAttachmentService) {
+				foreach ($uncachedCardIds as $cardId) {
+					$customCount = $service->getAttachmentCount((int)$cardId);
+					$dbCounts[$cardId] = ($dbCounts[$cardId] ?? 0) + $customCount;
+				}
+			}
+		}
+
+		// Cache the results and merge with already cached counts
+		foreach ($dbCounts as $cardId => $count) {
+			$this->attachmentCacheHelper->setAttachmentCount((int)$cardId, $count);
+			$counts[$cardId] = $count;
+		}
+
+		return $counts;
+	}
+
+	/**
 	 * @param $cardId
 	 * @param $type
 	 * @param $data

@@ -19,6 +19,7 @@ use OCA\Deck\Db\CardMapper;
 use OCA\Deck\Db\ChangeHelper;
 use OCA\Deck\Db\Label;
 use OCA\Deck\Db\LabelMapper;
+use OCA\Deck\Db\Stack;
 use OCA\Deck\Db\StackMapper;
 use OCA\Deck\Event\CardCreatedEvent;
 use OCA\Deck\Event\CardDeletedEvent;
@@ -65,36 +66,112 @@ class CardService {
 		private ProjectMapper $projectMapper,
 		private ?string $userId,
 	) {}
+	/**
+	 * @param Card[] $cards
+	 * @return CardDetails[]
+	 */
+	public function enrichCards(array $cards, Stack $stack = null): array {
+		if (!$cards) {
+			return [];
+		}
 
-	public function enrichCards($cards) {
 		$user = $this->userManager->get($this->userId);
 
-		$cardIds = array_map(function (Card $card) use ($user) {
-			// Everything done in here might be heavy as it is executed for every card
-			$cardId = $card->getId();
+		// Pre-load stacks and boards to avoid N+1 queries
+		$stackIds = [];
+		$boardIds = [];
+		foreach ($cards as $card) {
 			$this->cardMapper->mapOwner($card);
-
-			$card->setAttachmentCount($this->attachmentService->count($cardId));
-
-			// TODO We should find a better way just to get the comment count so we can save 1-3 queries per card here
-			$countComments = $this->commentsManager->getNumberOfCommentsForObject('deckCard', (string)$card->getId());
-			$lastRead = $countComments > 0 ? $this->commentsManager->getReadMark('deckCard', (string)$card->getId(), $user) : null;
-			$countUnreadComments = $lastRead ? $this->commentsManager->getNumberOfCommentsForObject('deckCard', (string)$card->getId(), $lastRead) : 0;
-			$card->setCommentsUnread($countUnreadComments);
-			$card->setCommentsCount($countComments);
-
-			$stack = $this->stackMapper->find($card->getStackId());
-			$board = $this->boardService->find($stack->getBoardId(), false);
-			$card->setRelatedStack($stack);
-			$card->setRelatedBoard($board);
-			
-			$project = $this->projectMapper->findByBoardId($board->getId());
-			if ($project !== null) {
-				$card->setProject($project);
+			if ($stack === null) {
+				$stackIds[$card->getStackId()] = true;
 			}
-			return $card->getId();
-		}, $cards);
+		}
 
+		// Load all unique stacks at once
+		$stacks = [];
+		if (!empty($stackIds)) {
+			foreach (array_keys($stackIds) as $stackId) {
+				try {
+					$loadedStack = $this->stackMapper->find($stackId);
+					$stacks[$stackId] = $loadedStack;
+					$boardIds[$loadedStack->getBoardId()] = true;
+				} catch (\Exception $e) {
+					// Stack not found, skip
+				}
+			}
+		} elseif ($stack !== null) {
+			$stacks[$stack->getId()] = $stack;
+			$boardIds[$stack->getBoardId()] = true;
+		}
+
+		// Load all unique boards at once
+		$boards = [];
+		foreach (array_keys($boardIds) as $boardId) {
+			try {
+				$boards[$boardId] = $this->boardService->find($boardId, false);
+			} catch (\Exception $e) {
+				// Board not found, skip
+			}
+		}
+
+		// Load all projects for the boards at once
+		$projects = [];
+		foreach (array_keys($boardIds) as $boardId) {
+			try {
+				$project = $this->projectMapper->findByBoardId($boardId);
+				if ($project !== null) {
+					$projects[$boardId] = $project;
+				}
+			} catch (\Exception $e) {
+				// Project not found, skip
+			}
+		}
+
+		// Collect card IDs and set relationships
+		$cardIds = [];
+		foreach ($cards as $card) {
+			$cardId = $card->getId();
+			$cardIds[] = $cardId;
+
+			// Set stack and board relationships
+			$cardStackId = $card->getStackId();
+			$relatedStack = $stacks[$cardStackId] ?? ($stack ?? null);
+			if ($relatedStack) {
+				$card->setRelatedStack($relatedStack);
+				$relatedBoard = $boards[$relatedStack->getBoardId()] ?? null;
+				if ($relatedBoard) {
+					$card->setRelatedBoard($relatedBoard);
+					
+					// Set project if exists for this board
+					$project = $projects[$relatedBoard->getId()] ?? null;
+					if ($project !== null) {
+						$card->setProject($project);
+					}
+				}
+			}
+		}
+
+		// Batch query for attachment counts
+		$attachmentCounts = $this->attachmentService->countByCardIds($cardIds);
+		foreach ($cards as $card) {
+			$card->setAttachmentCount($attachmentCounts[$card->getId()] ?? 0);
+		}
+
+		// Batch query for comments
+		$commentsCountPerCardId = $this->commentsManager->getNumberOfCommentsForObjects('deckCard', $cardIds);
+		$unreadCommentsCountPerCardId = $this->commentsManager->getNumberOfUnreadCommentsForObjects('deckCard', $cardIds, $user);
+
+		foreach ($commentsCountPerCardId as $cardId => $commentCounts) {
+			foreach ($cards as $card) {
+				if ($card->getId() === $cardId) {
+					$card->setCommentsUnread($unreadCommentsCountPerCardId[$cardId]);
+					$card->setCommentsCount($commentCounts);
+					break;
+				}
+			}
+		}
+
+		// Batch query for labels and assignments
 		$assignedLabels = $this->labelMapper->findAssignedLabelsForCards($cardIds);
 		$assignedUsers = $this->assignedUsersMapper->findIn($cardIds);
 
@@ -118,10 +195,6 @@ class CardService {
 				if ($reference) {
 					$referenceData = $this->referenceManager->resolveReference($reference);
 					$cardDetails->setReferenceData($referenceData);
-				}
-
-				if ($card->getProject() !== null) {
-					$cardDetails->setProject($card->getProject());
 				}
 
 				return $cardDetails;

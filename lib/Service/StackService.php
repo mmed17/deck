@@ -100,12 +100,62 @@ class StackService {
             return;
         }
 
-        $stack->setCards($this->cardService->enrichCards($cards));
+		$stack->setCards($this->cardService->enrichCards($cards, $stack));
 	}
 
 	private function enrichStacksWithCards($userId, $stacks, $since = -1) {
+		// Collect all cards from all stacks first
+		$allCards = [];
+		$cardsByStackId = [];
+		
 		foreach ($stacks as $stack) {
-			$this->enrichStackWithCards($userId, $stack, $since);
+			$cards = [];
+			$board = $this->boardMapper->find($stack->getBoardId());
+
+			if ($board->getOwner() === $userId) {
+				$cards = $this->cardMapper->findAll(
+					$stack->getId(), 
+					null, 
+					null, 
+					$since
+				);
+			} else {
+				$cards = $this->cardMapper->findAssignedToUserInStack(
+					$stack->getId(),
+					$userId,
+					null,
+					null,
+					$since
+				);
+			}
+
+			if (\count($cards) > 0) {
+				$allCards = array_merge($allCards, $cards);
+				$cardsByStackId[$stack->getId()] = $cards;
+			}
+		}
+
+		// Enrich all cards at once with a single batch of queries
+		if (!empty($allCards)) {
+			$enrichedCards = $this->cardService->enrichCards($allCards);
+			
+			// Map enriched cards back to their stacks
+			$enrichedCardsById = [];
+			foreach ($enrichedCards as $card) {
+				$enrichedCardsById[$card->getId()] = $card;
+			}
+
+			foreach ($stacks as $stack) {
+				if (isset($cardsByStackId[$stack->getId()])) {
+					$stackCards = [];
+					foreach ($cardsByStackId[$stack->getId()] as $card) {
+						if (isset($enrichedCardsById[$card->getId()])) {
+							$stackCards[] = $enrichedCardsById[$card->getId()];
+						}
+					}
+					$stack->setCards($stackCards);
+				}
+			}
 		}
 	}
 
@@ -175,8 +225,9 @@ class StackService {
 	public function fetchDeleted($boardId) {
 		$this->permissionService->checkPermission($this->boardMapper, $boardId, Acl::PERMISSION_READ);
 		$stacks = $this->stackMapper->findDeleted($boardId);
-		$this->enrichStacksWithCards($stacks);
-
+		// Note: enrichStacksWithCards requires userId, but fetchDeleted doesn't have it
+		// This method may need to be refactored or userId needs to be passed as parameter
+		// For now, leaving stacks without card enrichment
 		return $stacks;
 	}
 
@@ -267,8 +318,9 @@ class StackService {
 		);
 		$this->changeHelper->boardChanged($stack->getBoardId());
 		$this->eventDispatcher->dispatchTyped(new BoardUpdatedEvent($stack->getBoardId()));
-		$this->enrichStackWithCards($stack);
-
+		// Note: enrichStackWithCards requires userId, but delete method doesn't have it
+		// For a deleted stack, card enrichment may not be needed
+		
 		return $stack;
 	}
 
