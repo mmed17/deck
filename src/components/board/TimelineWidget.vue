@@ -91,21 +91,41 @@ export default {
 
             if (now < start) return 0
             if (now > end) return 100
+            
+            // Strictly time elapsed percentage
             const total = end - start
             const current = now - start
             return Math.min(100, Math.max(0, (current / total) * 100))
         },
+        // Helper to get raw dates
+        dates() {
+            if (!this.hasProjectData) return {}
+            return {
+                start: new Date(this.project.date_start).getTime(),
+                end: new Date(this.project.date_end).getTime(),
+                now: new Date().getTime()
+            }
+        },
         daysDiff() {
             if (!this.hasProjectData) return 0
-            const end = new Date(this.project.date_end).getTime()
-            const now = new Date().getTime()
+            const { end, now } = this.dates
+            // Returns positive if future, negative if past
             return Math.ceil((end - now) / (1000 * 60 * 60 * 24))
         },
         projectState() {
             if (!this.hasProjectData) return 'active'
-            if (this.progressPercentage >= 100) return 'completed'
+            const { start, now } = this.dates
+
+            // 1. Upcoming (Now is before Start)
+            if (now < start) return 'upcoming'
+
+            // 2. Overdue/Ended (Now is after End)
             if (this.daysDiff < 0) return 'overdue'
+
+            // 3. Critical (Less than 3 days left)
             if (this.daysDiff <= 3) return 'critical'
+
+            // 4. Default Active
             return 'active'
         },
         statusClass() {
@@ -113,19 +133,31 @@ export default {
         },
         statusText() {
             switch (this.projectState) {
-                case 'completed': return 'Completed'
-                case 'overdue': return 'Overdue'
+                case 'upcoming': return 'Scheduled'
+                case 'overdue': return 'Timeline Ended'
                 case 'critical': return 'Due Soon'
                 default: return 'In Progress'
             }
         },
         dayTrackerText() {
             if (!this.hasProjectData) return ''
-            const days = this.daysDiff
             
-            if (this.progressPercentage >= 100) return 'All tasks done'
-            if (days < 0) return `${Math.abs(days)} days overdue`
-            if (days === 0) return 'Due today'
+            // Handle Upcoming
+            const { start, now } = this.dates
+            if (now < start) {
+                const daysToStart = Math.ceil((start - now) / (1000 * 60 * 60 * 24))
+                return `Starts in ${daysToStart} days`
+            }
+
+            const days = this.daysDiff
+
+            // Handle Past
+            if (days < 0) return `Ended ${Math.abs(days)} days ago`
+            
+            // Handle Today
+            if (days === 0) return 'Ends today'
+            
+            // Handle Future
             return `${days} days left`
         },
     },
@@ -150,7 +182,6 @@ export default {
         },
         formatDate(dateString) {
             if (!dateString) return ''
-            // Added year: 'numeric' to formatting options
             return new Date(dateString).toLocaleDateString(undefined, { 
                 year: 'numeric', 
                 month: 'short', 
@@ -171,9 +202,9 @@ $transition-physics: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 
 /* Colors */
 $color-active: var(--color-primary, #0082c9);
-$color-success: #46ba61; /* Green */
 $color-overdue: #d32f2f; /* Red */
 $color-critical: #e6a23c; /* Orange */
+$color-upcoming: #6c757d; /* Grey/Neutral for scheduled */
 
 .timeline-widget {
     margin: 0px $margin;
@@ -256,10 +287,10 @@ $color-critical: #e6a23c; /* Orange */
         color: $color-critical;
         border-color: rgba($color-critical, 0.2);
     }
-    &.status-completed {
-        background-color: rgba($color-success, 0.1);
-        color: $color-success;
-        border-color: rgba($color-success, 0.2);
+    &.status-upcoming {
+        background-color: rgba($color-upcoming, 0.1);
+        color: $color-upcoming;
+        border-color: rgba($color-upcoming, 0.2);
     }
 }
 
@@ -289,7 +320,7 @@ $color-critical: #e6a23c; /* Orange */
     /* Override states */
     &.status-overdue { color: $color-overdue; }
     &.status-critical { color: $color-critical; }
-    &.status-completed { color: $color-success; }
+    &.status-upcoming { color: $color-upcoming; }
     
     .is-collapsed & { font-size: 18px; }
 }
@@ -324,7 +355,7 @@ $color-critical: #e6a23c; /* Orange */
 
     &.status-overdue { background-color: $color-overdue; }
     &.status-critical { background-color: $color-critical; }
-    &.status-completed { background-color: $color-success; animation: none; }
+    &.status-upcoming { background-color: $color-upcoming; width: 0 !important; /* Force 0 width for upcoming */ }
 
     background-image: linear-gradient(
         45deg, 
@@ -369,8 +400,8 @@ $color-critical: #e6a23c; /* Orange */
     transition: all 0.3s ease;
     
     &.status-overdue { background: $color-overdue; color: #fff; }
-    &.status-completed { background: $color-success; color: #fff; }
     &.status-critical { background: $color-critical; color: #fff; }
+    &.status-upcoming { background: rgba($color-upcoming, 0.2); color: $color-upcoming; }
 }
 
 /* --- SKELETON --- */
