@@ -6,6 +6,7 @@
 <template>
 	<div class="board-wrapper" :tabindex="-1" @touchend="fixActionRestriction">
 		<Controls :board="board" />
+		<TimelineWidget v-if="board" :board-id="board.id" />
 
 		<transition name="fade" mode="out-in">
 			<div v-if="loading" key="loading" class="emptycontent">
@@ -93,6 +94,7 @@ import GlobalSearchResults from '../search/GlobalSearchResults.vue'
 import { showError } from '../../helpers/errors.js'
 import { createSession } from '../../sessions.js'
 import CardSidebar from '../card/CardSidebar.vue'
+import TimelineWidget from './TimelineWidget.vue'
 export default {
 	name: 'Board',
 	components: {
@@ -108,7 +110,9 @@ export default {
 		NcButton,
 		NcLoadingIcon,
 		CheckIcon,
+		CheckIcon,
 		CardSidebar,
+		TimelineWidget,
 	},
 	inject: [
 		'boardApi',
