@@ -51,7 +51,8 @@ use Psr\Container\NotFoundExceptionInterface;
 // use OCA\Provisioning_API\Db\GroupSubscriptionMapper;
 // use OCA\Provisioning_API\Db\GroupSubscription;
 
-class BoardService {
+class BoardService
+{
 	private ?array $boardsCacheFull = null;
 	private ?array $boardsCachePartial = null;
 
@@ -76,14 +77,16 @@ class BoardService {
 		private SessionMapper $sessionMapper,
 		private ?string $userId,
 		// private GroupSubscriptionMapper $groupSubscriptionMapper,
-	) {}
+	) {
+	}
 
 	/**
 	 * Set a different user than the current one, e.g. when no user is available in occ
 	 *
 	 * @param string $userId
 	 */
-	public function setUserId(string $userId): void {
+	public function setUserId(string $userId): void
+	{
 		$this->userId = $userId;
 		$this->permissionService->setUserId($userId);
 	}
@@ -91,15 +94,20 @@ class BoardService {
 	/**
 	 * Get all boards that are shared with a user, their groups or circles
 	 */
-	public function getUserBoards(?int $since = null, bool $includeArchived = true, ?int $before = null,
-		?string $term = null): array {
+	public function getUserBoards(
+		?int $since = null,
+		bool $includeArchived = true,
+		?int $before = null,
+		?string $term = null
+	): array {
 		return $this->boardMapper->findAllForUser($this->userId, $since, $includeArchived, $before, $term);
 	}
 
 	/**
 	 * @return Board[]
 	 */
-	public function findAll(int $since = -1, bool $fullDetails = false, bool $includeArchived = true): array {
+	public function findAll(int $since = -1, bool $fullDetails = false, bool $includeArchived = true): array
+	{
 		$complete = $this->getUserBoards($since, $includeArchived);
 		return $this->enrichBoards($complete, $fullDetails);
 	}
@@ -110,7 +118,8 @@ class BoardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function find(int $boardId, bool $fullDetails = true, bool $allowDeleted = false): Board {
+	public function find(int $boardId, bool $fullDetails = true, bool $allowDeleted = false): Board
+	{
 		$this->boardServiceValidator->check(compact('boardId'));
 
 		if (isset($this->boardsCacheFull[$boardId]) && $fullDetails) {
@@ -137,7 +146,8 @@ class BoardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function isArchived($mapper, $id) {
+	public function isArchived($mapper, $id)
+	{
 		$this->boardServiceValidator->check(compact('id'));
 
 		try {
@@ -164,7 +174,8 @@ class BoardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function isDeleted($mapper, $id) {
+	public function isDeleted($mapper, $id)
+	{
 		$this->boardServiceValidator->check(compact('mapper', 'id'));
 
 		try {
@@ -190,7 +201,8 @@ class BoardService {
 	 * @return \OCP\AppFramework\Db\Entity
 	 * @throws BadRequestException
 	 */
-	public function create($title, $userId, $color): Board {
+	public function create($title, $userId, $color): Board
+	{
 		$this->boardServiceValidator->check(compact('title', 'userId', 'color'));
 
 		if (!$this->permissionService->canCreate()) {
@@ -211,14 +223,16 @@ class BoardService {
 		$board->setOwner($userId);
 		$board->setColor($color);
 		$new_board = $this->boardMapper->insert($board);
-	
+
 		// $this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), 1);
-		
+
 		// create default stacks
 		$default_stacks = [
-			$this->l10n->t('To do'),
-			$this->l10n->t('In progress'),
-			$this->l10n->t('Done')
+			$this->l10n->t('Process Steps'),
+			$this->l10n->t('Next Priority'),
+			$this->l10n->t('In Progress'),
+			$this->l10n->t('To Review'),
+			$this->l10n->t('Approved/Done')
 		];
 		$stacks = [];
 		foreach ($default_stacks as $index => $stackTitle) {
@@ -272,12 +286,13 @@ class BoardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function delete($id) {
-		
+	public function delete($id)
+	{
+
 		$this->boardServiceValidator->check(compact('id'));
-		
+
 		$this->permissionService->checkPermission($this->boardMapper, $id, Acl::PERMISSION_MANAGE);
-		
+
 		// $subscription = $this->groupSubscriptionMapper->findByUserId($this->userId);
 		$board = $this->find($id);
 		if ($board->getDeletedAt() > 0) {
@@ -285,15 +300,15 @@ class BoardService {
 		}
 		$board->setDeletedAt(time());
 		$board = $this->boardMapper->update($board);
-		
-		
+
+
 		// $this->groupSubscriptionMapper->incrementBoardCount($subscription->getGroupId(), -1);
-		
+
 		$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_BOARD, $board, ActivityManager::SUBJECT_BOARD_DELETE);
 		$this->changeHelper->boardChanged($board->getId());
 
 		$this->eventDispatcher->dispatchTyped(new BoardDeletedEvent($id));
-		
+
 		return $board;
 	}
 
@@ -304,7 +319,8 @@ class BoardService {
 	 * @throws NoPermissionException
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 */
-	public function deleteUndo($id) {
+	public function deleteUndo($id)
+	{
 		$this->boardServiceValidator->check(compact('id'));
 
 		$this->permissionService->checkPermission($this->boardMapper, $id, Acl::PERMISSION_MANAGE);
@@ -325,7 +341,8 @@ class BoardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function deleteForce($id) {
+	public function deleteForce($id)
+	{
 		$this->boardServiceValidator->check(compact('id'));
 
 		$this->permissionService->checkPermission($this->boardMapper, $id, Acl::PERMISSION_MANAGE);
@@ -346,7 +363,8 @@ class BoardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function update($id, $title, $color, $archived) {
+	public function update($id, $title, $color, $archived)
+	{
 		$this->boardServiceValidator->check(compact('id', 'title', 'color', 'archived'));
 
 		$this->permissionService->checkPermission($this->boardMapper, $id, Acl::PERMISSION_MANAGE);
@@ -365,7 +383,8 @@ class BoardService {
 		return $board;
 	}
 
-	private function applyPermissions($boardId, $edit, $share, $manage) {
+	private function applyPermissions($boardId, $edit, $share, $manage)
+	{
 		try {
 			$this->permissionService->checkPermission($this->boardMapper, $boardId, Acl::PERMISSION_MANAGE);
 		} catch (NoPermissionException $e) {
@@ -377,8 +396,9 @@ class BoardService {
 		return [$edit, $share, $manage];
 	}
 
-	public function enrichWithBoardSettings(Board $board) {
-		$globalCalendarConfig = (bool)$this->config->getUserValue($this->userId, Application::APP_ID, 'calendar', true);
+	public function enrichWithBoardSettings(Board $board)
+	{
+		$globalCalendarConfig = (bool) $this->config->getUserValue($this->userId, Application::APP_ID, 'calendar', true);
 		$settings = [
 			'notify-due' => $this->config->getUserValue($this->userId, Application::APP_ID, 'board:' . $board->getId() . ':notify-due', ConfigService::SETTING_BOARD_NOTIFICATION_DUE_ASSIGNED),
 			'calendar' => $this->config->getUserValue($this->userId, Application::APP_ID, 'board:' . $board->getId() . ':calendar', $globalCalendarConfig),
@@ -386,7 +406,8 @@ class BoardService {
 		$board->setSettings($settings);
 	}
 
-	public function enrichWithActiveSessions(Board $board) {
+	public function enrichWithActiveSessions(Board $board)
+	{
 		$sessions = $this->sessionMapper->findAllActive($board->getId());
 
 		$board->setActiveSessions(array_values(
@@ -409,14 +430,15 @@ class BoardService {
 	 * @throws BadRequestException
 	 * @throws NoPermissionException
 	 */
-	public function addAcl($boardId, $type, $participant, $edit, $share, $manage) {
+	public function addAcl($boardId, $type, $participant, $edit, $share, $manage)
+	{
 
 		$this->boardServiceValidator->check(compact('boardId', 'type', 'participant', 'edit', 'share', 'manage'));
 
 		$this->permissionService->checkPermission($this->boardMapper, $boardId, Acl::PERMISSION_SHARE);
 		[$edit, $share, $manage] = $this->applyPermissions($boardId, $edit, $share, $manage);
 
-		if($this->boardMapper->isShared($boardId)) {
+		if ($this->boardMapper->isShared($boardId)) {
 			throw new BadRequestException('This board is already shared.');
 		}
 
@@ -461,7 +483,8 @@ class BoardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function updateAcl($id, $edit, $share, $manage) {
+	public function updateAcl($id, $edit, $share, $manage)
+	{
 		$this->boardServiceValidator->check(compact('id', 'edit', 'share', 'manage'));
 
 		$this->permissionService->checkPermission($this->aclMapper, $id, Acl::PERMISSION_SHARE);
@@ -489,14 +512,15 @@ class BoardService {
 	 * @throws ContainerExceptionInterface
 	 * @throws NotFoundExceptionInterface
 	 */
-	public function deleteAcl(int $id): ?Acl {
+	public function deleteAcl(int $id): ?Acl
+	{
 		$this->permissionService->checkPermission($this->aclMapper, $id, Acl::PERMISSION_SHARE);
 		/** @var Acl $acl */
 		$acl = $this->aclMapper->find($id);
 		$this->boardMapper->mapAcl($acl);
 		if ($acl->getType() === Acl::PERMISSION_TYPE_USER) {
 			$this->assignedUsersMapper->deleteByParticipantOnBoard(
-				$acl->getParticipant(), 
+				$acl->getParticipant(),
 				$acl->getBoardId()
 			);
 		}
@@ -528,8 +552,14 @@ class BoardService {
 	 * @throws NoPermissionException
 	 */
 	public function clone(
-		int $id, string $userId,
-		bool $withCards = false, bool $withAssignments = false, bool $withLabels = false, bool $withDueDate = false, bool $moveCardsToLeftStack = false, bool $restoreArchivedCards = false,
+		int $id,
+		string $userId,
+		bool $withCards = false,
+		bool $withAssignments = false,
+		bool $withLabels = false,
+		bool $withDueDate = false,
+		bool $moveCardsToLeftStack = false,
+		bool $restoreArchivedCards = false,
 	): Board {
 		$this->boardServiceValidator->check(compact('id', 'userId'));
 
@@ -554,12 +584,14 @@ class BoardService {
 		$this->boardMapper->insert($newBoard);
 
 		foreach ($this->aclMapper->findAll($board->getId()) as $acl) {
-			$this->addAcl($newBoard->getId(),
+			$this->addAcl(
+				$newBoard->getId(),
 				$acl->getType(),
 				$acl->getParticipant(),
 				$acl->getPermissionEdit(),
 				$acl->getPermissionShare(),
-				$acl->getPermissionManage());
+				$acl->getPermissionManage()
+			);
 		}
 
 
@@ -590,11 +622,12 @@ class BoardService {
 		}
 
 		$this->eventDispatcher->dispatchTyped(new BoardCreatedEvent($board->getId()));
-		
+
 		return $this->find($newBoard->getId());
 	}
 
-	public function transferBoardOwnership(int $boardId, string $newOwner, bool $changeContent = false): Board {
+	public function transferBoardOwnership(int $boardId, string $newOwner, bool $changeContent = false): Board
+	{
 		$this->connection->beginTransaction();
 		try {
 			$board = $this->boardMapper->find($boardId);
@@ -625,7 +658,8 @@ class BoardService {
 		}
 	}
 
-	public function transferOwnership(string $owner, string $newOwner, bool $changeContent = false): \Generator {
+	public function transferOwnership(string $owner, string $newOwner, bool $changeContent = false): \Generator
+	{
 		$boards = $this->boardMapper->findAllByUser($owner);
 		foreach ($boards as $board) {
 			if ($board->getOwner() === $owner) {
@@ -642,13 +676,14 @@ class BoardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function export($id) : Board {
+	public function export($id): Board
+	{
 		if (is_numeric($id) === false) {
 			throw new BadRequestException('board id must be a number');
 		}
 
 		$this->permissionService->checkPermission($this->boardMapper, $id, Acl::PERMISSION_READ);
-		$board = $this->boardMapper->find((int)$id);
+		$board = $this->boardMapper->find((int) $id);
 		$this->enrichWithCards($board);
 		$this->enrichWithLabels($board);
 
@@ -656,7 +691,8 @@ class BoardService {
 	}
 
 	/** @param Board[] $boards */
-	private function enrichBoards(array $boards, bool $fullDetails = true): array {
+	private function enrichBoards(array $boards, bool $fullDetails = true): array
+	{
 		$result = [];
 		foreach ($boards as $board) {
 			// FIXME The enrichment in here could make use of combined queries
@@ -694,7 +730,8 @@ class BoardService {
 		return $boards;
 	}
 
-	private function cloneCards(Board $board, Board $newBoard, bool $withAssignments = false, bool $withLabels = false, bool $withDueDate = false, bool $moveCardsToLeftStack = false, bool $restoreArchivedCards = false): void {
+	private function cloneCards(Board $board, Board $newBoard, bool $withAssignments = false, bool $withLabels = false, bool $withDueDate = false, bool $moveCardsToLeftStack = false, bool $restoreArchivedCards = false): void
+	{
 		$stacks = $this->stackMapper->findAll($board->getId());
 		$newStacks = $this->stackMapper->findAll($newBoard->getId());
 
@@ -771,7 +808,8 @@ class BoardService {
 		}
 	}
 
-	private function enrichWithStacks($board, $since = -1) {
+	private function enrichWithStacks($board, $since = -1)
+	{
 		$stacks = $this->stackMapper->findAll($board->getId(), null, null, $since);
 
 		if (\count($stacks) === 0) {
@@ -781,7 +819,8 @@ class BoardService {
 		$board->setStacks($stacks);
 	}
 
-	private function enrichWithLabels($board, $since = -1) {
+	private function enrichWithLabels($board, $since = -1)
+	{
 		$labels = $this->labelMapper->findAll($board->getId(), null, null, $since);
 
 		if (\count($labels) === 0) {
@@ -791,7 +830,8 @@ class BoardService {
 		$board->setLabels($labels);
 	}
 
-	private function enrichWithUsers($board, $since = -1) {
+	private function enrichWithUsers($board, $since = -1)
+	{
 		$boardUsers = $this->permissionService->findUsers($board->getId());
 		if ($boardUsers === null || \count($boardUsers) === 0) {
 			return;
@@ -802,7 +842,8 @@ class BoardService {
 	/**
 	 * Clean a given board data from the Cache
 	 */
-	private function clearBoardFromCache(Board $board) {
+	private function clearBoardFromCache(Board $board)
+	{
 		$boardId = $board->getId();
 		$boardOwnerId = $board->getOwner();
 
@@ -811,7 +852,8 @@ class BoardService {
 		unset($this->boardsCachePartial[$boardId]);
 	}
 
-	private function enrichWithCards($board) {
+	private function enrichWithCards($board)
+	{
 		$stacks = $this->stackMapper->findAll($board->getId());
 		foreach ($stacks as $stack) {
 			$cards = $this->cardMapper->findAllByStack($stack->getId());

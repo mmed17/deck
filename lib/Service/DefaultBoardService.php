@@ -14,7 +14,8 @@ use OCP\IConfig;
 use OCP\IL10N;
 use OCP\PreConditionNotMetException;
 
-class DefaultBoardService {
+class DefaultBoardService
+{
 	private $boardMapper;
 	private $boardService;
 	private $stackService;
@@ -44,7 +45,8 @@ class DefaultBoardService {
 	 * @param $userId
 	 * @return bool
 	 */
-	public function checkFirstRun($userId): bool {
+	public function checkFirstRun($userId): bool
+	{
 		$firstRun = $this->config->getUserValue($userId, Application::APP_ID, 'firstRun', 'yes');
 
 		if ($firstRun === 'yes') {
@@ -70,20 +72,23 @@ class DefaultBoardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function createDefaultBoard(string $title, string $userId, string $color) {
+	public function createDefaultBoard(string $title, string $userId, string $color)
+	{
 		$defaultBoard = $this->boardService->create($title, $userId, $color);
 		$defaultStacks = [];
 		$defaultCards = [];
 
 		$boardId = $defaultBoard->getId();
 
-		$defaultStacks[] = $this->stackService->create($this->l10n->t('To do'), $boardId, 1);
-		$defaultStacks[] = $this->stackService->create($this->l10n->t('Doing'), $boardId, 1);
-		$defaultStacks[] = $this->stackService->create($this->l10n->t('Done'), $boardId, 1);
+		$defaultStacks[] = $this->stackService->create($this->l10n->t('Process Steps'), $boardId, 1);
+		$defaultStacks[] = $this->stackService->create($this->l10n->t('Next Priority'), $boardId, 2);
+		$defaultStacks[] = $this->stackService->create($this->l10n->t('In Progress'), $boardId, 3);
+		$defaultStacks[] = $this->stackService->create($this->l10n->t('To Review'), $boardId, 4);
+		$defaultStacks[] = $this->stackService->create($this->l10n->t('Approved/Done'), $boardId, 5);
 
-		$defaultCards[] = $this->cardService->create($this->l10n->t('Example Task 3'), $defaultStacks[0]->getId(), 'text', 0, $userId);
+		$defaultCards[] = $this->cardService->create($this->l10n->t('Example Task 1'), $defaultStacks[0]->getId(), 'text', 0, $userId);
 		$defaultCards[] = $this->cardService->create($this->l10n->t('Example Task 2'), $defaultStacks[1]->getId(), 'text', 0, $userId);
-		$defaultCards[] = $this->cardService->create($this->l10n->t('Example Task 1'), $defaultStacks[2]->getId(), 'text', 0, $userId);
+		$defaultCards[] = $this->cardService->create($this->l10n->t('Example Task 3'), $defaultStacks[4]->getId(), 'text', 0, $userId);
 
 		return $defaultBoard;
 	}

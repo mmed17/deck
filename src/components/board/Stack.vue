@@ -8,6 +8,7 @@
 		<div v-click-outside="stopCardCreation"
 			class="stack__header"
 			:class="{'stack__header--add': showAddCard}"
+			:style="{ '--stack-color': stackColor }"
 			:aria-label="stack.title">
 			<transition name="fade" mode="out-in">
 				<h3 v-if="!canManage || isArchived" tabindex="0">
@@ -204,6 +205,21 @@ export default {
 				return !card.archived
 			})
 		},
+		stackColor() {
+			// Color mapping based on stack title for the workflow stages
+			const colorMap = {
+				'Process Steps': '#64748b',     // Slate
+				'Next Priority': '#8b5cf6',     // Purple
+				'In Progress': '#3b82f6',       // Blue
+				'To Review': '#f59e0b',         // Amber
+				'Approved/Done': '#10b981',     // Emerald
+				// Fallback legacy names
+				'To do': '#64748b',
+				'Doing': '#3b82f6',
+				'Done': '#10b981',
+			}
+			return colorMap[this.stack?.title] || '#0082c9'
+		},
 		dragHandleSelector() {
 			return this.canEdit && !this.showArchived ? null : '.no-drag'
 		},
@@ -379,6 +395,9 @@ export default {
 		margin-top: 0;
 		cursor: grab;
 		background-color: var(--color-main-background);
+		border-top: 3px solid var(--stack-color, #0082c9);
+		border-radius: 4px 4px 0 0;
+		padding-top: 8px;
 
 		// Smooth fade out of the cards at the top
 		&:before {
@@ -428,7 +447,7 @@ export default {
 				border-radius: 3px;
 			}
 		}
-
+Z
 		form {
 			margin: -4px;
 			input {
