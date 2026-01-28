@@ -12,7 +12,8 @@ use OCA\Deck\Service\CardService;
 use OCP\AppFramework\Controller;
 use OCP\IRequest;
 
-class CardController extends Controller {
+class CardController extends Controller
+{
 	public function __construct(
 		$appName,
 		IRequest $request,
@@ -28,7 +29,8 @@ class CardController extends Controller {
 	 * @param $cardId
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function read($cardId) {
+	public function read($cardId)
+	{
 		return $this->cardService->find($cardId);
 	}
 
@@ -39,8 +41,13 @@ class CardController extends Controller {
 	 * @param $order
 	 * @return array
 	 */
-	public function reorder($cardId, $stackId, $order) {
-		return $this->cardService->reorder((int)$cardId, (int)$stackId, (int)$order);
+	public function reorder($cardId, $stackId, $order)
+	{
+		try {
+			return $this->cardService->reorder((int) $cardId, (int) $stackId, (int) $order);
+		} catch (\OCA\Deck\NoPermissionException $e) {
+			return new \OCP\AppFramework\Http\JSONResponse(['message' => $e->getMessage()], \OCP\AppFramework\Http::STATUS_FORBIDDEN);
+		}
 	}
 
 	/**
@@ -49,7 +56,8 @@ class CardController extends Controller {
 	 * @param $title
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function rename($cardId, $title) {
+	public function rename($cardId, $title)
+	{
 		return $this->cardService->rename($cardId, $title);
 	}
 
@@ -61,13 +69,14 @@ class CardController extends Controller {
 	 * @param int $order
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function create($title, $stackId, $type = 'plain', $order = 999, string $description = '', $duedate = null, $labels = [], $users = []) {
+	public function create($title, $stackId, $type = 'plain', $order = 999, string $description = '', $duedate = null, $labels = [], $users = [])
+	{
 		$card = $this->cardService->create($title, $stackId, $type, $order, $this->userId, $description, $duedate);
 
 		foreach ($labels as $label) {
 			$this->assignLabel($card->id, $label);
 		}
-		
+
 		foreach ($users as $user) {
 			$this->assignmentService->assignUser($card->id, $user['id'], $user['type']);
 		}
@@ -87,7 +96,8 @@ class CardController extends Controller {
 	 * @param $deletedAt
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function update($id, $title, $stackId, $type, $order, $description, $duedate, $deletedAt) {
+	public function update($id, $title, $stackId, $type, $order, $description, $duedate, $deletedAt)
+	{
 		return $this->cardService->update($id, $title, $stackId, $type, $this->userId, $description, $order, $duedate, $deletedAt);
 	}
 	/**
@@ -96,7 +106,8 @@ class CardController extends Controller {
 	 * @param $targetStackId
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function clone(int $cardId, ?int $targetStackId = null) {
+	public function clone(int $cardId, ?int $targetStackId = null)
+	{
 		return $this->cardService->cloneCard($cardId, $targetStackId);
 	}
 
@@ -105,7 +116,8 @@ class CardController extends Controller {
 	 * @param $cardId
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function delete($cardId) {
+	public function delete($cardId)
+	{
 		return $this->cardService->delete($cardId);
 	}
 
@@ -114,7 +126,8 @@ class CardController extends Controller {
 	 * @param $boardId
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function deleted($boardId) {
+	public function deleted($boardId)
+	{
 		return $this->cardService->fetchDeleted($boardId);
 	}
 
@@ -123,7 +136,8 @@ class CardController extends Controller {
 	 * @param $cardId
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function archive($cardId) {
+	public function archive($cardId)
+	{
 		return $this->cardService->archive($cardId);
 	}
 
@@ -132,7 +146,8 @@ class CardController extends Controller {
 	 * @param $cardId
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function unarchive($cardId) {
+	public function unarchive($cardId)
+	{
 		return $this->cardService->unarchive($cardId);
 	}
 
@@ -141,7 +156,8 @@ class CardController extends Controller {
 	 * @param $cardId
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function done(int $cardId) {
+	public function done(int $cardId)
+	{
 		return $this->cardService->done($cardId);
 	}
 
@@ -150,7 +166,8 @@ class CardController extends Controller {
 	 * @param $cardId
 	 * @return \OCP\AppFramework\Db\Entity
 	 */
-	public function undone(int $cardId) {
+	public function undone(int $cardId)
+	{
 		return $this->cardService->undone($cardId);
 	}
 
@@ -159,7 +176,8 @@ class CardController extends Controller {
 	 * @param $cardId
 	 * @param $labelId
 	 */
-	public function assignLabel($cardId, $labelId) {
+	public function assignLabel($cardId, $labelId)
+	{
 		$this->cardService->assignLabel($cardId, $labelId);
 	}
 
@@ -168,21 +186,24 @@ class CardController extends Controller {
 	 * @param $cardId
 	 * @param $labelId
 	 */
-	public function removeLabel($cardId, $labelId) {
+	public function removeLabel($cardId, $labelId)
+	{
 		$this->cardService->removeLabel($cardId, $labelId);
 	}
 
 	/**
 	 * @NoAdminRequired
 	 */
-	public function assignUser($cardId, $userId, $type = 0) {
+	public function assignUser($cardId, $userId, $type = 0)
+	{
 		return $this->assignmentService->assignUser($cardId, $userId, $type);
 	}
 
 	/**
 	 * @NoAdminRequired
 	 */
-	public function unassignUser($cardId, $userId, $type = 0) {
+	public function unassignUser($cardId, $userId, $type = 0)
+	{
 		return $this->assignmentService->unassignUser($cardId, $userId, $type);
 	}
 }

@@ -20,7 +20,8 @@ use OCP\IRequest;
  *
  * @package OCA\Deck\Controller
  */
-class CardApiController extends ApiController {
+class CardApiController extends ApiController
+{
 
 	/**
 	 * @param string $appName
@@ -46,7 +47,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Get a specific card.
 	 */
-	public function get() {
+	public function get()
+	{
 		$card = $this->cardService->find($this->request->getParam('cardId'));
 		$response = new DataResponse($card, HTTP::STATUS_OK);
 		$response->setETag($card->getEtag());
@@ -65,7 +67,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Get a specific card.
 	 */
-	public function create($title, $type = 'plain', $order = 999, $description = '', $duedate = null, $labels = [], $users = []) {
+	public function create($title, $type = 'plain', $order = 999, $description = '', $duedate = null, $labels = [], $users = [])
+	{
 		$card = $this->cardService->create($title, $this->request->getParam('stackId'), $type, $order, $this->userId, $description, $duedate);
 
 		foreach ($labels as $labelId) {
@@ -87,7 +90,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Update a card
 	 */
-	public function update($title, $type, $owner, $description = '', $order = 0, $duedate = null, $archived = null) {
+	public function update($title, $type, $owner, $description = '', $order = 0, $duedate = null, $archived = null)
+	{
 		$done = array_key_exists('done', $this->request->getParams()) ? new OptionalNullableValue($this->request->getParam('done', null)) : null;
 		$card = $this->cardService->update($this->request->getParam('cardId'), $title, $this->request->getParam('stackId'), $type, $owner, $description, $order, $duedate, 0, $archived, $done);
 		return new DataResponse($card, HTTP::STATUS_OK);
@@ -100,7 +104,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Delete a specific card.
 	 */
-	public function delete() {
+	public function delete()
+	{
 		$card = $this->cardService->delete($this->request->getParam('cardId'));
 		return new DataResponse($card, HTTP::STATUS_OK);
 	}
@@ -112,7 +117,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Assign a label to a card.
 	 */
-	public function assignLabel($labelId) {
+	public function assignLabel($labelId)
+	{
 		$card = $this->cardService->assignLabel($this->request->getParam('cardId'), $labelId);
 		return new DataResponse($card, HTTP::STATUS_OK);
 	}
@@ -124,7 +130,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Assign a label to a card.
 	 */
-	public function removeLabel($labelId) {
+	public function removeLabel($labelId)
+	{
 		$card = $this->cardService->removeLabel($this->request->getParam('cardId'), $labelId);
 		return new DataResponse($card, HTTP::STATUS_OK);
 	}
@@ -136,7 +143,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Assign a user to a card
 	 */
-	public function assignUser($cardId, $userId, $type = 0) {
+	public function assignUser($cardId, $userId, $type = 0)
+	{
 		$card = $this->assignmentService->assignUser($cardId, $userId, $type);
 		return new DataResponse($card, HTTP::STATUS_OK);
 	}
@@ -148,7 +156,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Unassign a user from a card
 	 */
-	public function unassignUser($cardId, $userId, $type = 0) {
+	public function unassignUser($cardId, $userId, $type = 0)
+	{
 		$card = $this->assignmentService->unassignUser($cardId, $userId, $type);
 		return new DataResponse($card, HTTP::STATUS_OK);
 	}
@@ -160,7 +169,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Archive card
 	 */
-	public function archive($cardId) {
+	public function archive($cardId)
+	{
 		$card = $this->cardService->archive($cardId);
 		return new DataResponse($card, HTTP::STATUS_OK);
 	}
@@ -172,7 +182,8 @@ class CardApiController extends ApiController {
 	 *
 	 * Unarchive card
 	 */
-	public function unarchive($cardId) {
+	public function unarchive($cardId)
+	{
 		$card = $this->cardService->unarchive($cardId);
 		return new DataResponse($card, HTTP::STATUS_OK);
 	}
@@ -184,8 +195,13 @@ class CardApiController extends ApiController {
 	 *
 	 * Reorder cards
 	 */
-	public function reorder($stackId, $order) {
-		$card = $this->cardService->reorder($this->request->getParam('cardId'), $stackId, $order);
-		return new DataResponse($card, HTTP::STATUS_OK);
+	public function reorder($stackId, $order)
+	{
+		try {
+			$card = $this->cardService->reorder($this->request->getParam('cardId'), $stackId, $order);
+			return new DataResponse($card, HTTP::STATUS_OK);
+		} catch (\OCA\Deck\NoPermissionException $e) {
+			return new DataResponse(['message' => $e->getMessage()], HTTP::STATUS_FORBIDDEN);
+		}
 	}
 }

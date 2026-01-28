@@ -6,11 +6,11 @@
 <template>
 	<AttachmentDragAndDrop v-if="card" :card-id="card.id" class="drop-upload--card">
 		<div :ref="`card${card.id}`"
-			:class="{'compact': compactMode, 'current-card': currentCard, 'has-labels': card.labels && card.labels.length > 0, 'card__editable': canEdit, 'card__archived': card.archived, 'card__highlight': highlight}"
+			:class="cardClasses"
 			tag="div"
 			:tabindex="0"
 			class="card"
-			@click="openCard"
+			@click="handleClick"
 			@keyup.self="handleCardKeyboardShortcut"
 			@mouseenter="focus(card.id)">
 			<div v-if="standalone" class="card-related">
@@ -19,6 +19,11 @@
 			</div>
 			<CardCover v-if="showCardCover" :card-id="card.id" />
 			<div class="card-upper">
+				<!-- Selection checkbox integrated in title row -->
+				<NcCheckboxRadioSwitch v-if="isSelectionMode"
+					class="card-checkbox"
+					:checked="isSelected"
+					@click.native.stop="toggleSelection" />
 				<h4 v-if="editingTitle === 0" key="title-view" dir="auto">
 					<span class="dragDisabled" contenteditable="false">{{ displayTitle }}</span>
 				</h4>
@@ -87,6 +92,7 @@ import AttachmentDragAndDrop from '../AttachmentDragAndDrop.vue'
 import CardMenu from './CardMenu.vue'
 import CardCover from './CardCover.vue'
 import DueDate from './badges/DueDate.vue'
+import { NcCheckboxRadioSwitch } from '@nextcloud/vue'
 import { getCurrentUser } from '@nextcloud/auth'
 
 const TITLE_EDITING_STATE = {
@@ -97,7 +103,7 @@ const TITLE_EDITING_STATE = {
 
 export default {
 	name: 'CardItem',
-	components: { CardBadges, AttachmentDragAndDrop, CardMenu, CardCover, DueDate },
+	components: { CardBadges, AttachmentDragAndDrop, CardMenu, CardCover, DueDate, NcCheckboxRadioSwitch },
 	directives: {
 		ClickOutside,
 	},
@@ -136,7 +142,11 @@ export default {
 		}),
 		...mapGetters([
 			'isArchived',
+			'isSelectionMode',
 		]),
+		isSelected() {
+			return this.$store.getters.isCardSelected(this.card?.id)
+		},
 		board() {
 			return this.$store.getters.boardById(this?.stack?.boardId)
 		},
@@ -193,6 +203,18 @@ export default {
 			}
 			return this.hasBadges
 		},
+		cardClasses() {
+			return {
+				compact: this.compactMode,
+				'current-card': this.currentCard,
+				'has-labels': this.card.labels && this.card.labels.length > 0,
+				card__editable: this.canEdit,
+				card__archived: this.card.archived,
+				card__highlight: this.highlight,
+				card__selected: this.isSelected,
+				card__selectable: this.isSelectionMode,
+			}
+		},
 	},
 	watch: {
 		currentCard(newValue) {
@@ -205,6 +227,15 @@ export default {
 		hasSelection() {
 			const selection = window.getSelection()
 			return selection.toString() !== ''
+		},
+		handleClick(event) {
+			// Always open card - selection is checkbox-only
+			this.openCard(event)
+		},
+		toggleSelection() {
+			if (this.card?.id) {
+				this.$store.dispatch('toggleCardSelection', this.card.id)
+			}
 		},
 		focus(card) {
 			if (this.shortcutLock || this.hasSelection()) {
@@ -434,6 +465,28 @@ export default {
 				flex-wrap: wrap;
 				align-self: flex-start;
 			}
+		}
+
+		// Selection mode styles
+		&.card__selectable {
+			cursor: pointer;
+
+			.card-upper {
+				display: flex;
+				align-items: flex-start;
+				gap: 8px;
+			}
+
+			.card-checkbox {
+				flex-shrink: 0;
+				margin-top: 2px;
+			}
+		}
+
+		&.card__selected {
+			border-color: var(--color-primary-element);
+			background-color: color-mix(in srgb, var(--color-primary-element) 8%, var(--color-main-background));
+			box-shadow: 0 0 0 1px var(--color-primary-element);
 		}
 	}
 

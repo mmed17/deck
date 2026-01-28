@@ -24,6 +24,16 @@
                 </div>
             </div>
 
+            <div v-if="board && board.permissions.PERMISSION_MANAGE" class="saas-section">
+                <div class="saas-section-header clickable" @click="toggleSection('permissions')">
+                    <h3>{{ t('deck', 'Permissions') }}</h3>
+                    <ChevronDown class="section-icon" :class="{ 'is-collapsed': sectionState.permissions }" />
+                </div>
+                <div v-show="!sectionState.permissions" class="section-content">
+                    <TransitionPermissionsManager :board-id="board.id" />
+                </div>
+            </div>
+
             <transition name="fade" mode="out-in">
                 <div v-if="loading" key="loading" class="emptycontent">
                     <div class="icon icon-loading" />
@@ -69,6 +79,24 @@
                         <ChevronDown class="section-icon" :class="{ 'is-collapsed': sectionState.tasks }" />
                     </div>
 
+                    <!-- Centralized Selection Toolbar -->
+                    <div v-if="isSelectionMode" class="selection-toolbar">
+                        <div class="selection-toolbar__info">
+                            <span class="selection-toolbar__count">{{ selectedCardIds.length }}</span>
+                            <span>{{ t('deck', 'cards selected') }}</span>
+                        </div>
+                        <div class="selection-toolbar__actions">
+                            <NcButton type="tertiary" @click="cancelSelection">
+                                {{ t('deck', 'Cancel') }}
+                            </NcButton>
+                            <NcButton type="primary"
+                                :disabled="selectedCardIds.length === 0"
+                                @click="showAssignmentModal = true">
+                                {{ t('deck', 'Assign to user') }}
+                            </NcButton>
+                        </div>
+                    </div>
+
                     <div v-show="!sectionState.tasks" ref="board" class="board" @mousedown="onMouseDown">
                         <Container lock-axis="y"
                             orientation="horizontal"
@@ -100,6 +128,38 @@
                 <CardSidebar :id="localModal" @close="localModal = null" />
             </div>
         </NcModal>
+
+        <!-- Bulk Assignment Modal -->
+        <NcModal v-if="showAssignmentModal"
+            size="normal"
+            :out-transition="true"
+            @close="closeAssignmentModal">
+            <div class="assignment-modal">
+                <h2>{{ t('deck', 'Assign cards') }}</h2>
+                <p class="assignment-modal__subtitle">
+                    {{ t('deck', 'Assign {count} selected cards to a user or group', { count: selectedCardIds.length }) }}
+                </p>
+                <div class="assignment-modal__select-wrapper">
+                    <NcSelect v-model="selectedAssignee"
+                        :options="formattedAssignables"
+                        :placeholder="t('deck', 'Select a user or group…')"
+                        label="displayname"
+                        track-by="multiselectKey"
+                        :user-select="true"
+                        :append-to-body="false" />
+                </div>
+                <div class="assignment-modal__actions">
+                    <NcButton type="tertiary" @click="closeAssignmentModal">
+                        {{ t('deck', 'Cancel') }}
+                    </NcButton>
+                    <NcButton type="primary"
+                        :disabled="!selectedAssignee"
+                        @click="assignSelectedCards">
+                        {{ t('deck', 'Assign') }}
+                    </NcButton>
+                </div>
+            </div>
+        </NcModal>
     </div>
 </template>
 
@@ -111,13 +171,14 @@ import DeckIcon from '../icons/DeckIcon.vue'
 import CheckIcon from 'vue-material-design-icons/Check.vue'
 import ChevronDown from 'vue-material-design-icons/ChevronDown.vue' 
 import Stack from './Stack.vue'
-import { NcEmptyContent, NcModal, NcButton, NcTextField, NcLoadingIcon } from '@nextcloud/vue'
+import { NcEmptyContent, NcModal, NcButton, NcTextField, NcLoadingIcon, NcSelect } from '@nextcloud/vue'
 import GlobalSearchResults from '../search/GlobalSearchResults.vue'
 import { showError } from '../../helpers/errors.js'
 import { createSession } from '../../sessions.js'
 import CardSidebar from '../card/CardSidebar.vue'
 import TimelineWidget from './TimelineWidget.vue'
 import ReportingDashboard from './ReportingDashboard.vue'
+import TransitionPermissionsManager from './TransitionPermissionsManager.vue'
 
 export default {
     name: 'Board',
@@ -133,11 +194,13 @@ export default {
         NcTextField,
         NcButton,
         NcLoadingIcon,
+        NcSelect,
         CheckIcon,
         ChevronDown, 
         CardSidebar,
         TimelineWidget,
         ReportingDashboard,
+        TransitionPermissionsManager,
     },
     inject: ['boardApi'],
     props: {
@@ -154,8 +217,12 @@ export default {
             sectionState: {
                 timeline: false,
                 analytics: false,
+                permissions: false,
                 tasks: false
-            }
+            },
+            // Assignment modal
+            showAssignmentModal: false,
+            selectedAssignee: null,
         }
     },
     computed: {
@@ -164,7 +231,7 @@ export default {
             board: state => state.currentBoard,
             showArchived: state => state.showArchived,
         }),
-        ...mapGetters(['canEdit', 'canManage']),
+        ...mapGetters(['canEdit', 'canManage', 'isSelectionMode', 'selectedCardIds', 'assignables']),
         stacksByBoard() {
             return this.board?.id ? this.$store.getters.stacksByBoard(this.board.id) : []
         },
@@ -173,6 +240,27 @@ export default {
         },
         isEmpty() {
             return this.stacksByBoard.length === 0
+        },
+        formattedAssignables() {
+            return this.assignables.map(item => {
+                const assignable = {
+                    ...item,
+                    user: item.primaryKey,
+                    displayName: item.displayname,
+                    icon: 'icon-user',
+                    isNoUser: false,
+                    multiselectKey: item.type + ':' + item.uid,
+                }
+                if (item.type === 1) {
+                    assignable.icon = 'icon-group'
+                    assignable.isNoUser = true
+                }
+                if (item.type === 7) {
+                    assignable.icon = 'icon-circles'
+                    assignable.isNoUser = true
+                }
+                return assignable
+            })
         },
     },
     watch: {
@@ -251,6 +339,26 @@ export default {
         },
         fixActionRestriction() {
             document.body.classList.remove('smooth-dnd-no-user-select', 'smooth-dnd-disable-touch-action')
+        },
+        // Selection mode methods
+        cancelSelection() {
+            this.$store.dispatch('exitSelectionMode')
+            this.closeAssignmentModal()
+        },
+        closeAssignmentModal() {
+            this.showAssignmentModal = false
+            this.selectedAssignee = null
+        },
+        async assignSelectedCards() {
+            if (!this.selectedAssignee || this.selectedCardIds.length === 0) {
+                return
+            }
+            const assignee = {
+                userId: this.selectedAssignee.uid,
+                type: this.selectedAssignee.type,
+            }
+            await this.$store.dispatch('bulkAssignCards', assignee)
+            this.closeAssignmentModal()
         },
     },
 }
@@ -450,5 +558,77 @@ form {
         margin-top: 16px;
     }
     .icon { opacity: 0.6; }
+}
+
+/* --- SELECTION TOOLBAR --- */
+.selection-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    margin: 0 0 16px 0;
+    background: linear-gradient(135deg, var(--color-primary-element-light) 0%, color-mix(in srgb, var(--color-primary-element) 15%, white) 100%);
+    border: 1px solid var(--color-primary-element);
+    border-radius: var(--border-radius-large);
+
+    &__info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
+    }
+
+    &__count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 28px;
+        padding: 0 8px;
+        background: var(--color-primary-element);
+        color: white;
+        border-radius: 14px;
+        font-weight: 600;
+    }
+
+    &__actions {
+        display: flex;
+        gap: 8px;
+    }
+}
+
+/* --- ASSIGNMENT MODAL --- */
+.assignment-modal {
+    padding: 24px;
+    min-width: 320px;
+    max-width: 400px;
+
+    h2 {
+        margin: 0 0 8px 0;
+        font-size: 1.2em;
+        font-weight: 600;
+    }
+
+    &__subtitle {
+        margin: 0 0 20px 0;
+        color: var(--color-text-maxcontrast);
+        font-size: 0.95em;
+    }
+
+    &__select-wrapper {
+        margin-bottom: 20px;
+
+        :deep(.v-select) {
+            width: 100%;
+        }
+    }
+
+    &__actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding-top: 8px;
+        border-top: 1px solid var(--color-border);
+    }
 }
 </style>

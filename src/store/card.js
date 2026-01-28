@@ -53,16 +53,16 @@ export default {
 				if (due !== '') {
 					const datediffHour = ((new Date(card.duedate) - new Date()) / 3600 / 1000)
 					switch (due) {
-					case 'noDue':
-						return (card.duedate === null)
-					case 'overdue':
-						return (card.overdue === 3)
-					case 'dueToday':
-						return (card.overdue >= 2)
-					case 'dueWeek':
-						return (datediffHour <= 7 * 24 && card.duedate !== null)
-					case 'dueMonth':
-						return (datediffHour <= 30 * 24 && card.duedate !== null)
+						case 'noDue':
+							return (card.duedate === null)
+						case 'overdue':
+							return (card.overdue === 3)
+						case 'dueToday':
+							return (card.overdue >= 2)
+						case 'dueWeek':
+							return (datediffHour <= 7 * 24 && card.duedate !== null)
+						case 'dueMonth':
+							return (datediffHour <= 30 * 24 && card.duedate !== null)
 					}
 				}
 
@@ -117,21 +117,21 @@ export default {
 							const datediffHour = ((new Date(card.duedate) - new Date()) / 3600 / 1000)
 							query = filterOutQuotes(query)
 							switch (query) {
-							case 'overdue':
-								hasMatch = hasMatch && (card.overdue === 3)
-								break
-							case 'today':
-								hasMatch = hasMatch && (datediffHour > 0 && datediffHour <= 24 && card.duedate !== null)
-								break
-							case 'week':
-								hasMatch = hasMatch && (datediffHour > 0 && datediffHour <= 7 * 24 && card.duedate !== null)
-								break
-							case 'month':
-								hasMatch = hasMatch && (datediffHour > 0 && datediffHour <= 30 * 24 && card.duedate !== null)
-								break
-							case 'none':
-								hasMatch = hasMatch && (card.duedate === null)
-								break
+								case 'overdue':
+									hasMatch = hasMatch && (card.overdue === 3)
+									break
+								case 'today':
+									hasMatch = hasMatch && (datediffHour > 0 && datediffHour <= 24 && card.duedate !== null)
+									break
+								case 'week':
+									hasMatch = hasMatch && (datediffHour > 0 && datediffHour <= 7 * 24 && card.duedate !== null)
+									break
+								case 'month':
+									hasMatch = hasMatch && (datediffHour > 0 && datediffHour <= 30 * 24 && card.duedate !== null)
+									break
+								case 'none':
+									hasMatch = hasMatch && (card.duedate === null)
+									break
 							}
 
 							if (card.duedate === null || !hasMatch) {
@@ -142,21 +142,21 @@ export default {
 							const parsedCardDate = moment(card.duedate)
 							const parsedDate = moment(query.slice(isValidComparator ? comparator.length : 0))
 							switch (comparator) {
-							case '<':
-								hasMatch = hasMatch && parsedCardDate.isBefore(parsedDate)
-								break
-							case '<=':
-								hasMatch = hasMatch && parsedCardDate.isSameOrBefore(parsedDate)
-								break
-							case '>':
-								hasMatch = hasMatch && parsedCardDate.isAfter(parsedDate)
-								break
-							case '>=':
-								hasMatch = hasMatch && parsedCardDate.isSameOrAfter(parsedDate)
-								break
-							default:
-								hasMatch = hasMatch && parsedCardDate.isSame(parsedDate)
-								break
+								case '<':
+									hasMatch = hasMatch && parsedCardDate.isBefore(parsedDate)
+									break
+								case '<=':
+									hasMatch = hasMatch && parsedCardDate.isSameOrBefore(parsedDate)
+									break
+								case '>':
+									hasMatch = hasMatch && parsedCardDate.isAfter(parsedDate)
+									break
+								case '>=':
+									hasMatch = hasMatch && parsedCardDate.isSameOrAfter(parsedDate)
+									break
+								default:
+									hasMatch = hasMatch && parsedCardDate.isSame(parsedDate)
+									break
 							}
 
 						} else if (filter === 'assigned') {
@@ -298,7 +298,7 @@ export default {
 			const updatedCard = await apiClient.updateCard(card)
 			commit('deleteCard', updatedCard)
 		},
-		async reorderCard({ commit, getters }, card) {
+		async reorderCard({ commit, getters, dispatch, rootState }, card) {
 			let i = 0
 			const newCards = []
 			for (const c of getters.cardsByStack(card.stackId)) {
@@ -315,9 +315,15 @@ export default {
 			newCards.push(card)
 			await commit('updateCardsReorder', newCards)
 
-			apiClient.reorderCard(card).then((cards) => {
-				commit('updateCardsReorder', Object.values(cards))
-			})
+			apiClient.reorderCard(card)
+				.then((cards) => {
+					commit('updateCardsReorder', Object.values(cards))
+				})
+				.catch((error) => {
+					console.error(error)
+					OC.Notification.showTemporary('Failed to reorder card')
+					dispatch('loadStacks', rootState.currentBoard.id, { root: true })
+				})
 		},
 		async deleteCard({ commit }, card) {
 			await apiClient.deleteCard(card.id)

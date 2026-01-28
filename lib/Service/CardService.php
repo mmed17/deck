@@ -39,7 +39,8 @@ use Psr\Log\LoggerInterface;
 use OCA\ProjectCreatorAIO\Db\ProjectMapper;
 use OCA\ProjectCreatorAIO\Db\Project;
 
-class CardService {
+class CardService
+{
 	public function __construct(
 		private CardMapper $cardMapper,
 		private StackMapper $stackMapper,
@@ -63,10 +64,13 @@ class CardService {
 		private AssignmentService $assignmentService,
 		private IReferenceManager $referenceManager,
 		private ProjectMapper $projectMapper,
+		private StackTransitionPermissionService $transitionPermissionService,
 		private ?string $userId,
-	) {}
+	) {
+	}
 
-	public function enrichCards($cards) {
+	public function enrichCards($cards)
+	{
 		$user = $this->userManager->get($this->userId);
 
 		$cardIds = array_map(function (Card $card) use ($user) {
@@ -77,9 +81,9 @@ class CardService {
 			$card->setAttachmentCount($this->attachmentService->count($cardId));
 
 			// TODO We should find a better way just to get the comment count so we can save 1-3 queries per card here
-			$countComments = $this->commentsManager->getNumberOfCommentsForObject('deckCard', (string)$card->getId());
-			$lastRead = $countComments > 0 ? $this->commentsManager->getReadMark('deckCard', (string)$card->getId(), $user) : null;
-			$countUnreadComments = $lastRead ? $this->commentsManager->getNumberOfCommentsForObject('deckCard', (string)$card->getId(), $lastRead) : 0;
+			$countComments = $this->commentsManager->getNumberOfCommentsForObject('deckCard', (string) $card->getId());
+			$lastRead = $countComments > 0 ? $this->commentsManager->getReadMark('deckCard', (string) $card->getId(), $user) : null;
+			$countUnreadComments = $lastRead ? $this->commentsManager->getNumberOfCommentsForObject('deckCard', (string) $card->getId(), $lastRead) : 0;
 			$card->setCommentsUnread($countUnreadComments);
 			$card->setCommentsCount($countComments);
 
@@ -87,7 +91,7 @@ class CardService {
 			$board = $this->boardService->find($stack->getBoardId(), false);
 			$card->setRelatedStack($stack);
 			$card->setRelatedBoard($board);
-			
+
 			$project = $this->projectMapper->findByBoardId($board->getId());
 			if ($project !== null) {
 				$card->setProject($project);
@@ -130,7 +134,8 @@ class CardService {
 		);
 	}
 
-	public function fetchDeleted($boardId) {
+	public function fetchDeleted($boardId)
+	{
 		$this->cardServiceValidator->check(compact('boardId'));
 		$this->permissionService->checkPermission($this->boardMapper, $boardId, Acl::PERMISSION_READ);
 		$cards = $this->cardMapper->findDeleted($boardId);
@@ -145,7 +150,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function find(int $cardId) {
+	public function find(int $cardId)
+	{
 		$this->permissionService->checkPermission($this->cardMapper, $cardId, Acl::PERMISSION_READ);
 		$card = $this->cardMapper->find($cardId);
 		[$card] = $this->enrichCards([$card]);
@@ -162,7 +168,8 @@ class CardService {
 		return $card;
 	}
 
-	public function findCalendarEntries($boardId) {
+	public function findCalendarEntries($boardId)
+	{
 		try {
 			$this->permissionService->checkPermission($this->boardMapper, $boardId, Acl::PERMISSION_READ);
 		} catch (NoPermissionException $e) {
@@ -188,7 +195,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadrequestException
 	 */
-	public function create($title, $stackId, $type, $order, $owner, $description = '', $duedate = null) {
+	public function create($title, $stackId, $type, $order, $owner, $description = '', $duedate = null)
+	{
 		$this->cardServiceValidator->check(compact('title', 'stackId', 'type', 'order', 'owner'));
 
 		$this->permissionService->checkPermission($this->stackMapper, $stackId, Acl::PERMISSION_EDIT);
@@ -223,7 +231,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function delete($id) {
+	public function delete($id)
+	{
 		if (is_numeric($id) === false) {
 			throw new BadRequestException('card id must be a number');
 		}
@@ -263,7 +272,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function update($id, $title, $stackId, $type, $owner, $description = '', $order = 0, $duedate = null, $deletedAt = null, $archived = null, ?OptionalNullableValue $done = null) {
+	public function update($id, $title, $stackId, $type, $owner, $description = '', $order = 0, $duedate = null, $deletedAt = null, $archived = null, ?OptionalNullableValue $done = null)
+	{
 		$this->cardServiceValidator->check(compact('id', 'title', 'stackId', 'type', 'owner', 'order'));
 
 		$this->permissionService->checkPermission($this->cardMapper, $id, Acl::PERMISSION_EDIT, allowDeletedCard: true);
@@ -348,7 +358,7 @@ class CardService {
 			foreach ($card->getLabels() as $cardLabel) {
 				$this->removeLabel($card->getId(), $cardLabel->getId());
 				$label = $this->labelMapper->find($cardLabel->getId());
-				$filteredLabels = array_values(array_filter($boardLabels, fn ($item) => $item->getTitle() === $label->getTitle()));
+				$filteredLabels = array_values(array_filter($boardLabels, fn($item) => $item->getTitle() === $label->getTitle()));
 				// clone labels that are assigned to card but don't exist in new board
 				if (empty($filteredLabels)) {
 					if ($this->permissionService->getPermissions($boardId)[Acl::PERMISSION_MANAGE] === true) {
@@ -377,7 +387,8 @@ class CardService {
 		return $card;
 	}
 
-	public function cloneCard(int $id, ?int $targetStackId = null):Card {
+	public function cloneCard(int $id, ?int $targetStackId = null): Card
+	{
 		$this->permissionService->checkPermission($this->cardMapper, $id, Acl::PERMISSION_READ);
 		$originCard = $this->cardMapper->find($id);
 		if ($targetStackId === null) {
@@ -419,7 +430,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function rename($id, $title) {
+	public function rename($id, $title)
+	{
 		$this->cardServiceValidator->check(compact('id', 'title'));
 
 		$this->permissionService->checkPermission($this->cardMapper, $id, Acl::PERMISSION_EDIT);
@@ -450,7 +462,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function reorder($id, $stackId, $order) {
+	public function reorder($id, $stackId, $order)
+	{
 		$this->cardServiceValidator->check(compact('id', 'stackId', 'order'));
 
 
@@ -465,6 +478,13 @@ class CardService {
 		if ($card->getArchived()) {
 			throw new StatusException('Operation not allowed. This card is archived.');
 		}
+
+		// Check D-RASCI-VF transition permissions
+		$oldStackId = $card->getStackId();
+		if ($oldStackId !== $stackId) {
+			$this->transitionPermissionService->checkTransitionPermission($id, $oldStackId, $stackId, $this->userId);
+		}
+
 		$changes = new ChangeSet($card);
 		$card->setStackId($stackId);
 		$this->cardMapper->update($card);
@@ -508,7 +528,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function archive($id) {
+	public function archive($id)
+	{
 		$this->cardServiceValidator->check(compact('id'));
 
 
@@ -537,7 +558,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function unarchive($id) {
+	public function unarchive($id)
+	{
 		$this->cardServiceValidator->check(compact('id'));
 
 
@@ -565,7 +587,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function done(int $id): Card {
+	public function done(int $id): Card
+	{
 		$this->permissionService->checkPermission($this->cardMapper, $id, Acl::PERMISSION_EDIT);
 		if ($this->boardService->isArchived($this->cardMapper, $id)) {
 			throw new StatusException('Operation not allowed. This board is archived.');
@@ -591,7 +614,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function undone(int $id): Card {
+	public function undone(int $id): Card
+	{
 		$this->permissionService->checkPermission($this->cardMapper, $id, Acl::PERMISSION_EDIT);
 		if ($this->boardService->isArchived($this->cardMapper, $id)) {
 			throw new StatusException('Operation not allowed. This board is archived.');
@@ -616,7 +640,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function assignLabel($cardId, $labelId) {
+	public function assignLabel($cardId, $labelId)
+	{
 		$this->cardServiceValidator->check(compact('cardId', 'labelId'));
 
 		$this->permissionService->checkPermission($this->cardMapper, $cardId, Acl::PERMISSION_EDIT);
@@ -649,7 +674,8 @@ class CardService {
 	 * @throws \OCP\AppFramework\Db\MultipleObjectsReturnedException
 	 * @throws BadRequestException
 	 */
-	public function removeLabel($cardId, $labelId) {
+	public function removeLabel($cardId, $labelId)
+	{
 		$this->cardServiceValidator->check(compact('cardId', 'labelId'));
 
 
@@ -674,13 +700,15 @@ class CardService {
 		$this->eventDispatcher->dispatchTyped(new CardUpdatedEvent($card));
 	}
 
-	public function getCardUrl(int $cardId): string {
+	public function getCardUrl(int $cardId): string
+	{
 		$boardId = $this->cardMapper->findBoardId($cardId);
 
 		return $this->urlGenerator->linkToRouteAbsolute('deck.page.indexCard', ['boardId' => $boardId, 'cardId' => $cardId]);
 	}
 
-	public function getRedirectUrlForCard(int $cardId): string {
+	public function getRedirectUrlForCard(int $cardId): string
+	{
 		return $this->urlGenerator->linkToRouteAbsolute('deck.page.redirectToCard', ['cardId' => $cardId]);
 	}
 }

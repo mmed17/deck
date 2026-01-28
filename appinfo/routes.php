@@ -74,11 +74,17 @@ return [
 		['name' => 'label#update', 'url' => '/labels/{labelId}', 'verb' => 'PUT'],
 		['name' => 'label#delete', 'url' => '/labels/{labelId}', 'verb' => 'DELETE'],
 
+
+		// stack transition permissions
+		['name' => 'stack_transition_permission#index', 'url' => '/boards/{boardId}/transition-permissions', 'verb' => 'GET'],
+		['name' => 'stack_transition_permission#create', 'url' => '/boards/{boardId}/transition-permissions', 'verb' => 'POST'],
+		['name' => 'stack_transition_permission#destroy', 'url' => '/transition-permissions/{id}', 'verb' => 'DELETE'],
+
 		// notes api
 		['name' => 'note_api#index', 'url' => '/api/v{apiVersion}/cards/{cardId}/notes', 'verb' => 'GET'],
-        ['name' => 'note_api#create', 'url' => '/api/v{apiVersion}/cards/{cardId}/notes', 'verb' => 'POST'],
-        ['name' => 'note_api#update', 'url' => '/api/v{apiVersion}/notes/{noteId}', 'verb' => 'PUT'],
-        ['name' => 'note_api#destroy', 'url' => '/api/v{apiVersion}/notes/{noteId}', 'verb' => 'DELETE'],
+		['name' => 'note_api#create', 'url' => '/api/v{apiVersion}/cards/{cardId}/notes', 'verb' => 'POST'],
+		['name' => 'note_api#update', 'url' => '/api/v{apiVersion}/notes/{noteId}', 'verb' => 'PUT'],
+		['name' => 'note_api#destroy', 'url' => '/api/v{apiVersion}/notes/{noteId}', 'verb' => 'DELETE'],
 
 		// api
 		['name' => 'board_api#index', 'url' => '/api/v{apiVersion}/boards', 'verb' => 'GET'],
@@ -91,9 +97,9 @@ return [
 		['name' => 'board_api#deleteAcl', 'url' => '/api/v{apiVersion}/boards/{boardId}/acl/{aclId}', 'verb' => 'DELETE'],
 		['name' => 'board_api#updateAcl', 'url' => '/api/v{apiVersion}/boards/{boardId}/acl/{aclId}', 'verb' => 'PUT'],
 
-		['name' => 'board_import_api#getAllowedSystems', 'url' => '/api/v{apiVersion}/boards/import/getSystems','verb' => 'GET'],
-		['name' => 'board_import_api#getConfigSchema', 'url' => '/api/v{apiVersion}/boards/import/config/schema/{name}','verb' => 'GET'],
-		['name' => 'board_import_api#import', 'url' => '/api/v{apiVersion}/boards/import','verb' => 'POST'],
+		['name' => 'board_import_api#getAllowedSystems', 'url' => '/api/v{apiVersion}/boards/import/getSystems', 'verb' => 'GET'],
+		['name' => 'board_import_api#getConfigSchema', 'url' => '/api/v{apiVersion}/boards/import/config/schema/{name}', 'verb' => 'GET'],
+		['name' => 'board_import_api#import', 'url' => '/api/v{apiVersion}/boards/import', 'verb' => 'POST'],
 
 
 		['name' => 'stack_api#index', 'url' => '/api/v{apiVersion}/boards/{boardId}/stacks', 'verb' => 'GET'],
@@ -136,7 +142,7 @@ return [
 		['name' => 'attachment_api_v11#delete', 'url' => '/api/v{apiVersion}/boards/{boardId}/stacks/{stackId}/cards/{cardId}/attachments/{type}/{attachmentId}', 'verb' => 'DELETE', 'requirements' => ['apiVersion' => '1.1']],
 		['name' => 'attachment_api_v11#restore', 'url' => '/api/v{apiVersion}/boards/{boardId}/stacks/{stackId}/cards/{cardId}/attachments/{type}/{attachmentId}/restore', 'verb' => 'PUT', 'requirements' => ['apiVersion' => '1.1']],
 
-		['name' => 'board_api#preflighted_cors', 'url' => '/api/v{apiVersion}/{path}','verb' => 'OPTIONS', 'requirements' => ['path' => '.+']],
+		['name' => 'board_api#preflighted_cors', 'url' => '/api/v{apiVersion}/{path}', 'verb' => 'OPTIONS', 'requirements' => ['path' => '.+']],
 	],
 	'ocs' => [
 		['name' => 'Config#get', 'url' => '/api/v{apiVersion}/config', 'verb' => 'GET'],

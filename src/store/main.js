@@ -59,6 +59,9 @@ export default new Vuex.Store({
 		activityLoadMore: true,
 		filter: { tags: [], users: [], due: '', completed: 'both' },
 		shortcutLock: false,
+		// Card selection mode
+		selectionMode: false,
+		selectedCardIds: [],
 	},
 	getters: {
 		config: state => (key) => {
@@ -126,6 +129,12 @@ export default new Vuex.Store({
 		isArchived: state => {
 			return state.currentBoard && state.currentBoard.archived
 		},
+		assignableUsers: state => {
+			return state.assignableUsers
+		},
+		isSelectionMode: state => state.selectionMode,
+		selectedCardIds: state => state.selectedCardIds,
+		isCardSelected: state => cardId => state.selectedCardIds.includes(cardId),
 	},
 	mutations: {
 		setFullApp(state, isFullApp) {
@@ -135,17 +144,17 @@ export default new Vuex.Store({
 			const [scope, id, configKey] = key.split(':', 3)
 			let indexExisting = -1
 			switch (scope) {
-			case 'board':
-				indexExisting = state.boards.findIndex((b) => {
-					return id === '' + b.id
-				})
+				case 'board':
+					indexExisting = state.boards.findIndex((b) => {
+						return id === '' + b.id
+					})
 
-				if (indexExisting > -1) {
-					Vue.set(state.boards[indexExisting].settings, configKey, value)
-				}
-				break
-			default:
-				Vue.set(state.config, key, value)
+					if (indexExisting > -1) {
+						Vue.set(state.boards[indexExisting].settings, configKey, value)
+					}
+					break
+				default:
+					Vue.set(state.config, key, value)
 			}
 		},
 		setSearchQuery(state, searchQuery) {
@@ -157,18 +166,18 @@ export default new Vuex.Store({
 		TOGGLE_FILTER(state, filter) {
 			Object.keys(filter).forEach((key) => {
 				switch (key) {
-				case 'due':
-					Vue.set(state.filter, key, filter.due)
-					break
-				default:
-					filter[key].forEach((item) => {
-						if (state.filter[key].indexOf(item) === -1) {
-							state.filter[key].push(item)
-						} else {
-							state.filter[key].splice(state.filter[key].indexOf(item), 1)
-						}
-					})
-					break
+					case 'due':
+						Vue.set(state.filter, key, filter.due)
+						break
+					default:
+						filter[key].forEach((item) => {
+							if (state.filter[key].indexOf(item) === -1) {
+								state.filter[key].push(item)
+							} else {
+								state.filter[key].splice(state.filter[key].indexOf(item), 1)
+							}
+						})
+						break
 				}
 			})
 		},
@@ -301,6 +310,24 @@ export default new Vuex.Store({
 		},
 		TOGGLE_SHORTCUT_LOCK(state, lock) {
 			state.shortcutLock = lock
+		},
+		// Selection mode mutations
+		SET_SELECTION_MODE(state, enabled) {
+			state.selectionMode = enabled
+			if (!enabled) {
+				state.selectedCardIds = []
+			}
+		},
+		TOGGLE_CARD_SELECTION(state, cardId) {
+			const index = state.selectedCardIds.indexOf(cardId)
+			if (index === -1) {
+				state.selectedCardIds.push(cardId)
+			} else {
+				state.selectedCardIds.splice(index, 1)
+			}
+		},
+		CLEAR_CARD_SELECTION(state) {
+			state.selectedCardIds = []
 		},
 	},
 	actions: {
@@ -516,6 +543,35 @@ export default new Vuex.Store({
 		},
 		toggleShortcutLock({ commit }, lock) {
 			commit('TOGGLE_SHORTCUT_LOCK', lock)
+		},
+		// Selection mode actions
+		enterSelectionMode({ commit }) {
+			commit('SET_SELECTION_MODE', true)
+		},
+		exitSelectionMode({ commit }) {
+			commit('SET_SELECTION_MODE', false)
+		},
+		toggleCardSelection({ commit }, cardId) {
+			commit('TOGGLE_CARD_SELECTION', cardId)
+		},
+		async bulkAssignCards({ state, getters, dispatch, commit }, assignee) {
+			const cardIds = [...state.selectedCardIds]
+			for (const cardId of cardIds) {
+				const card = getters.cardById(cardId)
+				if (!card) continue
+				// Skip if user is already assigned
+				const alreadyAssigned = card.assignedUsers?.some(
+					u => u.participant.uid === assignee.userId && u.participant.type === assignee.type
+				)
+				if (alreadyAssigned) continue
+				try {
+					await dispatch('assignCardToUser', { card, assignee })
+				} catch (e) {
+					// Silently skip errors
+					console.debug('Skipping card assignment:', cardId, e)
+				}
+			}
+			commit('SET_SELECTION_MODE', false)
 		},
 	},
 })

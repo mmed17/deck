@@ -40,7 +40,13 @@
 						value="">
 				</form>
 			</transition>
-			<NcActions v-if="canManage && !isArchived" :force-menu="true">
+			<NcActions v-if="canManage && !isArchived && !isSelectionMode" :force-menu="true">
+				<NcActionButton @click="enterSelectionMode">
+					<template #icon>
+						<CheckboxMultipleMarked :size="20" />
+					</template>
+					{{ t('deck', 'Select cards') }}
+				</NcActionButton>
 				<NcActionButton v-if="!showArchived" icon="icon-archive" @click="modalArchivAllCardsShow=true">
 					<template #icon>
 						<ArchiveIcon decorative />
@@ -57,7 +63,7 @@
 					{{ t('deck', 'Delete list') }}
 				</NcActionButton>
 			</NcActions>
-			<NcActions v-if="canEdit && !showArchived && !isArchived">
+			<NcActions v-if="canEdit && !showArchived && !isArchived && !selectionMode">
 				<NcActionButton data-cy="action:add-card" @click.stop="showAddCard=true">
 					{{ t('deck', 'Add card') }}
 					<template #icon>
@@ -66,6 +72,39 @@
 				</NcActionButton>
 			</NcActions>
 		</div>
+
+		<!-- Assignment Modal -->
+		<NcModal v-if="showAssignmentPopover"
+			size="normal"
+			:out-transition="true"
+			@close="closeAssignmentModal">
+			<div class="assignment-modal">
+				<h2>{{ t('deck', 'Assign cards') }}</h2>
+				<p class="assignment-modal__subtitle">
+					{{ t('deck', 'Assign {count} selected cards to a user or group', { count: selectedCardIds.length }) }}
+				</p>
+				<div class="assignment-modal__select-wrapper">
+					<NcSelect v-model="selectedAssignee"
+						:options="formattedAssignables"
+						:placeholder="t('deck', 'Select a user or group…')"
+						label="displayname"
+						track-by="multiselectKey"
+						:user-select="true"
+						:append-to-body="false"
+						:calculate-position="null" />
+				</div>
+				<div class="assignment-modal__actions">
+					<NcButton type="tertiary" @click="closeAssignmentModal">
+						{{ t('deck', 'Cancel') }}
+					</NcButton>
+					<NcButton type="primary"
+						:disabled="!selectedAssignee"
+						@click="assignSelectedCards">
+						{{ t('deck', 'Assign') }}
+					</NcButton>
+				</div>
+			</div>
+		</NcModal>
 
 		<NcModal v-if="modalArchivAllCardsShow" @close="modalArchivAllCardsShow=false">
 			<div class="modal__content">
@@ -103,7 +142,9 @@
 				<transition :appear="animate && !card.animated && (card.animated=true)"
 					:appear-class="'zoom-appear-class'"
 					:appear-active-class="'zoom-appear-active-class'">
-					<CardItem :id="card.id" ref="card" :dragging="draggingCard" />
+					<CardItem :id="card.id"
+						ref="card"
+						:dragging="draggingCard" />
 				</transition>
 			</Draggable>
 		</Container>
@@ -140,7 +181,8 @@ import { mapGetters, mapState } from 'vuex'
 import { Container, Draggable } from 'vue-smooth-dnd'
 import ArchiveIcon from 'vue-material-design-icons/Archive.vue'
 import CardPlusOutline from 'vue-material-design-icons/CardPlusOutline.vue'
-import { NcActions, NcActionButton, NcModal } from '@nextcloud/vue'
+import { NcActions, NcActionButton, NcModal, NcButton, NcSelect } from '@nextcloud/vue'
+import CheckboxMultipleMarked from 'vue-material-design-icons/CheckboxMultipleMarked.vue'
 import { showError, showUndo } from '@nextcloud/dialogs'
 
 import CardItem from '../cards/CardItem.vue'
@@ -156,8 +198,11 @@ export default {
 		Container,
 		Draggable,
 		NcModal,
+		NcButton,
+		NcSelect,
 		ArchiveIcon,
 		CardPlusOutline,
+		CheckboxMultipleMarked,
 	},
 	directives: {
 		ClickOutside,
@@ -186,6 +231,9 @@ export default {
 				total: 0,
 				current: null,
 			},
+			// Assignment modal (selection is now in store)
+			showAssignmentPopover: false,
+			selectedAssignee: null,
 		}
 	},
 	computed: {
@@ -193,6 +241,9 @@ export default {
 			'canManage',
 			'canEdit',
 			'isArchived',
+			'assignables',
+			'isSelectionMode',
+			'selectedCardIds',
 		]),
 		...mapState({
 			showArchived: state => state.showArchived,
@@ -230,6 +281,27 @@ export default {
 			set(newValue) {
 				this.$store.dispatch('setConfig', { cardDetailsInModal: newValue })
 			},
+		},
+		formattedAssignables() {
+			return this.assignables.map(item => {
+				const assignable = {
+					...item,
+					user: item.primaryKey,
+					displayName: item.displayname,
+					icon: 'icon-user',
+					isNoUser: false,
+					multiselectKey: item.type + ':' + item.uid,
+				}
+				if (item.type === 1) {
+					assignable.icon = 'icon-group'
+					assignable.isNoUser = true
+				}
+				if (item.type === 7) {
+					assignable.icon = 'icon-circles'
+					assignable.isNoUser = true
+				}
+				return assignable
+			})
 		},
 	},
 	watch: {
@@ -336,6 +408,29 @@ export default {
 			} finally {
 				this.stateCardCreating = false
 			}
+		},
+		// Selection mode methods
+		enterSelectionMode() {
+			this.$store.dispatch('enterSelectionMode')
+		},
+		cancelSelection() {
+			this.$store.dispatch('exitSelectionMode')
+			this.closeAssignmentModal()
+		},
+		async assignSelectedCards() {
+			if (!this.selectedAssignee || this.selectedCardIds.length === 0) {
+				return
+			}
+			const assignee = {
+				userId: this.selectedAssignee.uid,
+				type: this.selectedAssignee.type,
+			}
+			await this.$store.dispatch('bulkAssignCards', assignee)
+			this.closeAssignmentModal()
+		},
+		closeAssignmentModal() {
+			this.showAssignmentPopover = false
+			this.selectedAssignee = null
 		},
 		onCreateCardFocus() {
 			this.$store.dispatch('toggleShortcutLock', true)
@@ -545,4 +640,55 @@ Z
 		margin-bottom: 30px;
 	}
 
+	// Selection mode styles
+	.stack__header--selection {
+		background-color: var(--color-primary-element-light);
+	}
+
+	.stack__title--selection {
+		font-weight: bold;
+		color: var(--color-primary-element);
+	}
+
+	.stack__selection-actions {
+		display: flex;
+		gap: 8px;
+		margin-left: auto;
+	}
+
+	.assignment-modal {
+		padding: 24px;
+		min-width: 320px;
+		max-width: 400px;
+
+		h2 {
+			margin: 0 0 8px 0;
+			font-size: 1.2em;
+			font-weight: 600;
+		}
+
+		&__subtitle {
+			margin: 0 0 20px 0;
+			color: var(--color-text-maxcontrast);
+			font-size: 0.95em;
+		}
+
+		&__select-wrapper {
+			margin-bottom: 20px;
+
+			:deep(.v-select) {
+				width: 100%;
+			}
+		}
+
+		&__actions {
+			display: flex;
+			justify-content: flex-end;
+			gap: 8px;
+			padding-top: 8px;
+			border-top: 1px solid var(--color-border);
+		}
+	}
+
 </style>
+
