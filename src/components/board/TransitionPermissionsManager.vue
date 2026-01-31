@@ -7,6 +7,14 @@
             </p>
         </div>
 
+        <!-- Role Profile Manager -->
+        <RoleProfileManager
+            v-if="organizationId"
+            :board-id="boardId"
+            :organization-id="organizationId"
+            @profile-applied="loadPermissions"
+        />
+
         <!-- Add Permission Form -->
         <div class="add-permission-form">
             <h5>{{ t('deck', 'Add New Permission Rule') }}</h5>
@@ -105,7 +113,7 @@
         </div>
 
         <div v-else class="empty-state">
-            <p>{{ t('deck', 'No permission rules defined. All card movements are allowed.') }}</p>
+            <p>{{ t('deck', 'No permission rules defined. No card movements are allowed.') }}</p>
         </div>
 
         <!-- Role Reference Guide -->
@@ -133,6 +141,7 @@ import Account from 'vue-material-design-icons/Account.vue'
 import AccountGroup from 'vue-material-design-icons/AccountGroup.vue'
 import GoogleCirclesExtended from 'vue-material-design-icons/GoogleCirclesExtended.vue'
 import { StackTransitionPermissionApi } from '../../services/StackTransitionPermissionApi.js'
+import RoleProfileManager from './RoleProfileManager.vue'
 
 export default {
     name: 'TransitionPermissionsManager',
@@ -144,11 +153,16 @@ export default {
         Account,
         AccountGroup,
         GoogleCirclesExtended,
+        RoleProfileManager,
     },
     props: {
         boardId: {
             type: Number,
             required: true,
+        },
+        organizationId: {
+            type: Number,
+            default: null,
         },
     },
     data() {

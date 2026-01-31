@@ -11,6 +11,7 @@ namespace OCA\Deck\Service;
 
 use OCA\Deck\Db\StackTransitionPermission;
 use OCA\Deck\Db\StackTransitionPermissionMapper;
+use OCA\Deck\Db\StackMapper;
 use OCA\Deck\Db\CardMapper;
 use OCA\Deck\NoPermissionException;
 use OCP\IGroupManager;
@@ -20,6 +21,7 @@ class StackTransitionPermissionService
 {
     public function __construct(
         private StackTransitionPermissionMapper $mapper,
+        private StackMapper $stackMapper,
         private CardMapper $cardMapper,
         private PermissionService $permissionService,
         private CirclesService $circlesService,
@@ -61,25 +63,25 @@ class StackTransitionPermissionService
             return true;
         }
 
-        // Get transition permissions for this specific move
-        $permissions = $this->mapper->findByTransition($boardId, $oldStackId, $newStackId);
-
         // Check if the board has ANY D-RASCI-VF rules defined
         $allBoardPermissions = $this->mapper->findByBoard($boardId);
 
-        // If no D-RASCI rules exist on this board at all, don't allow the move (backward compatible)
+        // If no D-RASCI rules exist on this board at all, don't allow the move
         if (empty($allBoardPermissions)) {
             throw new NoPermissionException('No permission rules defined for this transition. Moving cards to this column requires explicit D-RASCI-VF permission.');
         }
 
-        // Board has D-RASCI rules, so we operate in "deny by default" mode
-        // If no specific permissions exist for this transition, deny the move
-        if (empty($permissions)) {
-            throw new NoPermissionException('No permission rules defined for this transition. Moving cards to this column requires explicit D-RASCI-VF permission.');
+        // Check Forward Rules (A -> B)
+        $forwardPermissions = $this->mapper->findByTransition($boardId, $oldStackId, $newStackId);
+        foreach ($forwardPermissions as $permission) {
+            if ($this->userHasRole($permission, $userId)) {
+                return true;
+            }
         }
 
-        // Check if user has any of the required roles for this transition
-        foreach ($permissions as $permission) {
+        // Check Backward Rules (B -> A) - Bidirectional Allowance
+        $backwardPermissions = $this->mapper->findByTransition($boardId, $newStackId, $oldStackId);
+        foreach ($backwardPermissions as $permission) {
             if ($this->userHasRole($permission, $userId)) {
                 return true;
             }
@@ -87,7 +89,7 @@ class StackTransitionPermissionService
 
         // No matching permission found
         throw new NoPermissionException('You do not have permission to move cards to this column. Required role: ' .
-            $this->getRequiredRolesLabel($permissions));
+            $this->getRequiredRolesLabel(array_merge($forwardPermissions, $backwardPermissions)));
     }
 
     /**
@@ -143,7 +145,23 @@ class StackTransitionPermissionService
      */
     public function getTransitionPermissions(int $boardId): array
     {
-        return $this->mapper->findByBoard($boardId);
+        $permissions = $this->mapper->findByBoard($boardId);
+        $stacks = $this->stackMapper->findAll($boardId);
+
+        $stackTitles = [];
+        foreach ($stacks as $stack) {
+            $stackTitles[$stack->getId()] = $stack->getTitle();
+        }
+
+        $enrichedPermissions = [];
+        foreach ($permissions as $permission) {
+            $p = $permission->jsonSerialize();
+            $p['fromStackTitle'] = isset($stackTitles[$permission->getFromStackId()]) ? $stackTitles[$permission->getFromStackId()] : null;
+            $p['toStackTitle'] = isset($stackTitles[$permission->getToStackId()]) ? $stackTitles[$permission->getToStackId()] : null;
+            $enrichedPermissions[] = $p;
+        }
+
+        return $enrichedPermissions;
     }
 
     /**

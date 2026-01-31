@@ -38,6 +38,7 @@ use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
 use OCA\ProjectCreatorAIO\Db\ProjectMapper;
 use OCA\ProjectCreatorAIO\Db\Project;
+use OCA\Deck\Service\StackTransitionPermissionService;
 
 class CardService
 {
@@ -64,7 +65,7 @@ class CardService
 		private AssignmentService $assignmentService,
 		private IReferenceManager $referenceManager,
 		private ProjectMapper $projectMapper,
-		private StackTransitionPermissionService $transitionPermissionService,
+		private StackTransitionPermissionService $stackTransitionPermissionService,
 		private ?string $userId,
 	) {
 	}
@@ -482,7 +483,7 @@ class CardService
 		// Check D-RASCI-VF transition permissions
 		$oldStackId = $card->getStackId();
 		if ($oldStackId !== $stackId) {
-			$this->transitionPermissionService->checkTransitionPermission($id, $oldStackId, $stackId, $this->userId);
+			$this->stackTransitionPermissionService->checkTransitionPermission($id, $card->getStackId(), $stackId, $this->userId);
 		}
 
 		$changes = new ChangeSet($card);

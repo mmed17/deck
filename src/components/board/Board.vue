@@ -30,7 +30,7 @@
                     <ChevronDown class="section-icon" :class="{ 'is-collapsed': sectionState.permissions }" />
                 </div>
                 <div v-show="!sectionState.permissions" class="section-content">
-                    <TransitionPermissionsManager :board-id="board.id" />
+                    <TransitionPermissionsManager :board-id="board.id" :organization-id="organizationId" />
                 </div>
             </div>
 
@@ -140,13 +140,16 @@
                     {{ t('deck', 'Assign {count} selected cards to a user or group', { count: selectedCardIds.length }) }}
                 </p>
                 <div class="assignment-modal__select-wrapper">
+                    <!-- Hidden focusable element to trap modal's auto-focus -->
+                    <span tabindex="0" class="focus-trap" aria-hidden="true" />
                     <NcSelect v-model="selectedAssignee"
                         :options="formattedAssignables"
                         :placeholder="t('deck', 'Select a user or group…')"
                         label="displayname"
                         track-by="multiselectKey"
                         :user-select="true"
-                        :append-to-body="false" />
+                        :autofocus="false"
+                        :append-to-body="true" />
                 </div>
                 <div class="assignment-modal__actions">
                     <NcButton type="tertiary" @click="closeAssignmentModal">
@@ -223,6 +226,8 @@ export default {
             // Assignment modal
             showAssignmentModal: false,
             selectedAssignee: null,
+            // Organization ID for role profiles
+            organizationId: null,
         }
     },
     computed: {
@@ -288,6 +293,8 @@ export default {
         },
         async fetchData() {
             this.loading = true
+            // Reset organizationId when loading new board data
+            this.organizationId = null
             try {
                 await this.$store.dispatch('loadBoardById', this.id)
                 await this.$store.dispatch('loadStacks', this.id)
@@ -305,6 +312,20 @@ export default {
                 showError(e)
             } finally {
                 this.loading = false
+            }
+            this.fetchOrganizationId()
+        },
+        async fetchOrganizationId() {
+            try {
+                const url = OC.generateUrl('/apps/projectcreatoraio/api/v1/projects/board/' + this.id)
+                const response = await fetch(url)
+                if (response.ok) {
+                    const project = await response.json()
+                    this.organizationId = project?.organization_id || null
+                }
+                console.debug('Fetched organizationId:', this.organizationId, 'for board:', this.id)
+            } catch (e) {
+                console.debug('Could not fetch organization ID for board:', e)
             }
         },
         onDropStack({ removedIndex, addedIndex }) {
@@ -601,7 +622,6 @@ form {
 .assignment-modal {
     padding: 24px;
     min-width: 320px;
-    max-width: 400px;
 
     h2 {
         margin: 0 0 8px 0;
@@ -617,6 +637,12 @@ form {
 
     &__select-wrapper {
         margin-bottom: 20px;
+
+        .focus-trap {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
 
         :deep(.v-select) {
             width: 100%;

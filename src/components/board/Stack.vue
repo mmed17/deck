@@ -659,7 +659,7 @@ Z
 	.assignment-modal {
 		padding: 24px;
 		min-width: 320px;
-		max-width: 400px;
+		max-width: 100px;
 
 		h2 {
 			margin: 0 0 8px 0;

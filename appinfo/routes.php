@@ -80,6 +80,15 @@ return [
 		['name' => 'stack_transition_permission#create', 'url' => '/boards/{boardId}/transition-permissions', 'verb' => 'POST'],
 		['name' => 'stack_transition_permission#destroy', 'url' => '/transition-permissions/{id}', 'verb' => 'DELETE'],
 
+		// role profiles
+		['name' => 'role_profile#index', 'url' => '/organizations/{organizationId}/role-profiles', 'verb' => 'GET'],
+		['name' => 'role_profile#show', 'url' => '/role-profiles/{profileId}', 'verb' => 'GET'],
+		['name' => 'role_profile#create', 'url' => '/organizations/{organizationId}/role-profiles', 'verb' => 'POST'],
+		['name' => 'role_profile#update', 'url' => '/role-profiles/{profileId}', 'verb' => 'PUT'],
+		['name' => 'role_profile#destroy', 'url' => '/role-profiles/{profileId}', 'verb' => 'DELETE'],
+		['name' => 'role_profile#createFromBoard', 'url' => '/boards/{boardId}/export-role-profile', 'verb' => 'POST'],
+		['name' => 'role_profile#applyToBoard', 'url' => '/boards/{boardId}/apply-role-profile/{profileId}', 'verb' => 'POST'],
+
 		// notes api
 		['name' => 'note_api#index', 'url' => '/api/v{apiVersion}/cards/{cardId}/notes', 'verb' => 'GET'],
 		['name' => 'note_api#create', 'url' => '/api/v{apiVersion}/cards/{cardId}/notes', 'verb' => 'POST'],
