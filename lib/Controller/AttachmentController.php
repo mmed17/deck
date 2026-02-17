@@ -7,6 +7,7 @@
 
 namespace OCA\Deck\Controller;
 
+use OCA\Deck\Db\CardMapper;
 use OCA\Deck\Service\AttachmentService;
 use OCP\AppFramework\Controller;
 use OCP\IRequest;
@@ -17,9 +18,20 @@ class AttachmentController extends Controller {
 		$appName,
 		IRequest $request,
 		private AttachmentService $attachmentService,
-		private ProjectMapper $projectMapper
+		private ProjectMapper $projectMapper,
+		private CardMapper $cardMapper,
 	) {
 		parent::__construct($appName, $request);
+	}
+
+	private function toSafeFolderName(string $name): string {
+		// Folder names must not contain path separators and should avoid control chars.
+		$name = preg_replace('/[\x00-\x1F\x7F]/u', '', $name) ?? '';
+		$name = str_replace(['/', '\\'], '-', $name);
+		$name = str_replace(['<', '>', ':', '"', '|', '?', '*'], '-', $name);
+		$name = trim($name);
+		$name = trim($name, '.');
+		return $name;
 	}
 
 	/**
@@ -51,12 +63,17 @@ class AttachmentController extends Controller {
 	 */
 	public function create($cardId) {
 		$projectFolderPath = null;
-        $project = $this->projectMapper->findByCardId($cardId);
+		$project = $this->projectMapper->findByCardId($cardId);
 		
-        if ($project !== null && $project->getFolderPath() !== null) {
+		if ($project !== null && $project->getFolderPath() !== null) {
 			$folderName = basename($project->getFolderPath());
-            $projectFolderPath = $folderName . '/Scrumban';
-        }
+			$card = $this->cardMapper->find((int)$cardId, false);
+			$cardFolderName = $this->toSafeFolderName((string)$card->getTitle());
+			if ($cardFolderName === '') {
+				$cardFolderName = 'Card';
+			}
+			$projectFolderPath = $folderName . '/Scrumban/' . $cardFolderName;
+		}
 
 		return $this->attachmentService->create(
 			$cardId,

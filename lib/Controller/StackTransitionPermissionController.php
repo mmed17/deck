@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Deck\Controller;
 
+use OCA\Deck\NoPermissionException;
 use OCA\Deck\Service\StackTransitionPermissionService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
@@ -39,6 +40,8 @@ class StackTransitionPermissionController extends OCSController
         try {
             $permissions = $this->transitionPermissionService->getTransitionPermissions($boardId);
             return new DataResponse($permissions);
+        } catch (NoPermissionException $e) {
+            return new DataResponse(['message' => $e->getMessage()], Http::STATUS_FORBIDDEN);
         } catch (\Exception $e) {
             $this->logger->error('Error fetching transition permissions: ' . $e->getMessage());
             return new DataResponse(['message' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);
@@ -75,6 +78,8 @@ class StackTransitionPermissionController extends OCSController
                 $participantType
             );
             return new DataResponse($permission, Http::STATUS_CREATED);
+        } catch (NoPermissionException $e) {
+            return new DataResponse(['message' => $e->getMessage()], Http::STATUS_FORBIDDEN);
         } catch (\InvalidArgumentException $e) {
             return new DataResponse(['message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
         } catch (\Exception $e) {
@@ -95,6 +100,8 @@ class StackTransitionPermissionController extends OCSController
         try {
             $this->transitionPermissionService->deleteTransitionPermission($id);
             return new DataResponse([], Http::STATUS_NO_CONTENT);
+        } catch (NoPermissionException $e) {
+            return new DataResponse(['message' => $e->getMessage()], Http::STATUS_FORBIDDEN);
         } catch (\Exception $e) {
             $this->logger->error('Error deleting transition permission: ' . $e->getMessage());
             return new DataResponse(['message' => $e->getMessage()], Http::STATUS_INTERNAL_SERVER_ERROR);

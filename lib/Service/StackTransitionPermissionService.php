@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Deck\Service;
 
+use OCA\Deck\Db\Acl;
 use OCA\Deck\Db\StackTransitionPermission;
 use OCA\Deck\Db\StackTransitionPermissionMapper;
 use OCA\Deck\Db\StackMapper;
@@ -145,6 +146,8 @@ class StackTransitionPermissionService
      */
     public function getTransitionPermissions(int $boardId): array
     {
+        $this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
+
         $permissions = $this->mapper->findByBoard($boardId);
         $stacks = $this->stackMapper->findAll($boardId);
 
@@ -184,6 +187,8 @@ class StackTransitionPermissionService
         string $participant,
         int $participantType
     ): StackTransitionPermission {
+        $this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
+
         // Validate role
         if (!in_array($requiredRole, StackTransitionPermission::getValidRoles())) {
             throw new \InvalidArgumentException('Invalid role: ' . $requiredRole);
@@ -210,6 +215,7 @@ class StackTransitionPermissionService
     public function deleteTransitionPermission(int $id): void
     {
         $permission = $this->mapper->find($id);
+        $this->permissionService->checkPermission(null, $permission->getBoardId(), Acl::PERMISSION_MANAGE);
         $this->mapper->delete($permission);
     }
 

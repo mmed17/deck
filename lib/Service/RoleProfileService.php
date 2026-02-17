@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\Deck\Service;
 
 use DateTime;
+use OCA\Deck\Db\Acl;
 use OCA\Deck\Db\RoleProfile;
 use OCA\Deck\Db\RoleProfileMapper;
 use OCA\Deck\Db\RoleProfilePermission;
@@ -17,7 +18,11 @@ use OCA\Deck\Db\RoleProfilePermissionMapper;
 use OCA\Deck\Db\StackMapper;
 use OCA\Deck\Db\StackTransitionPermission;
 use OCA\Deck\Db\StackTransitionPermissionMapper;
+use OCA\Deck\NoPermissionException;
 use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\DB\QueryBuilder\IQueryBuilder;
+use OCP\IDBConnection;
+use OCP\IGroupManager;
 
 class RoleProfileService
 {
@@ -26,6 +31,10 @@ class RoleProfileService
         private RoleProfilePermissionMapper $permissionMapper,
         private StackMapper $stackMapper,
         private StackTransitionPermissionMapper $transitionPermissionMapper,
+        private PermissionService $permissionService,
+        private IGroupManager $groupManager,
+        private IDBConnection $db,
+        private ?string $userId,
     ) {
     }
 
@@ -37,6 +46,8 @@ class RoleProfileService
      */
     public function getProfiles(int $organizationId): array
     {
+        $this->assertOrganizationMember($organizationId);
+
         $profiles = $this->profileMapper->findByOrganization($organizationId);
         $result = [];
 
@@ -62,6 +73,8 @@ class RoleProfileService
     public function getProfile(int $profileId): array
     {
         $profile = $this->profileMapper->find($profileId);
+        $this->assertOrganizationMember((int) $profile->getOrganizationId());
+
         $profileData = $profile->jsonSerialize();
         $profileData['permissions'] = array_map(
             fn(RoleProfilePermission $p) => $p->jsonSerialize(),
@@ -85,6 +98,8 @@ class RoleProfileService
         string $ownerId,
         array $permissions = []
     ): RoleProfile {
+        $this->assertOrganizationAdmin($organizationId);
+
         $profile = new RoleProfile();
         $profile->setName($name);
         $profile->setOrganizationId($organizationId);
@@ -123,6 +138,9 @@ class RoleProfileService
         int $organizationId,
         string $ownerId
     ): RoleProfile {
+        $this->assertOrganizationAdmin($organizationId);
+        $this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
+
         // Get existing permissions from board
         $existingPermissions = $this->transitionPermissionMapper->findByBoard($boardId);
 
@@ -170,7 +188,11 @@ class RoleProfileService
      */
     public function applyProfile(int $profileId, int $boardId, bool $clearExisting = false): array
     {
+        $this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
+
         $profile = $this->profileMapper->find($profileId);
+        $this->assertOrganizationMember((int) $profile->getOrganizationId());
+
         $profilePermissions = $this->permissionMapper->findByProfile($profileId);
 
         // Get stacks for name resolution
@@ -238,6 +260,8 @@ class RoleProfileService
     public function deleteProfile(int $profileId): void
     {
         $profile = $this->profileMapper->find($profileId);
+        $this->assertOrganizationAdmin((int) $profile->getOrganizationId());
+
         $this->permissionMapper->deleteByProfile($profileId);
         $this->profileMapper->delete($profile);
     }
@@ -254,6 +278,8 @@ class RoleProfileService
     public function updateProfile(int $profileId, string $name, ?array $permissions = null): RoleProfile
     {
         $profile = $this->profileMapper->find($profileId);
+        $this->assertOrganizationAdmin((int) $profile->getOrganizationId());
+
         $profile->setName($name);
         $profile->setUpdatedAt(new DateTime());
         $this->profileMapper->update($profile);
@@ -274,5 +300,60 @@ class RoleProfileService
         }
 
         return $profile;
+    }
+
+    private function assertOrganizationMember(int $organizationId): void
+    {
+        if ($this->isGlobalAdmin()) {
+            return;
+        }
+
+        if ($this->getOrganizationMembership($organizationId) === null) {
+            throw new NoPermissionException('You are not a member of this organization');
+        }
+    }
+
+    private function assertOrganizationAdmin(int $organizationId): void
+    {
+        if ($this->isGlobalAdmin()) {
+            return;
+        }
+
+        $membership = $this->getOrganizationMembership($organizationId);
+        if ($membership === null || (string) ($membership['role'] ?? '') !== 'admin') {
+            throw new NoPermissionException('Only organization admins can manage role profiles');
+        }
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function getOrganizationMembership(int $organizationId): ?array
+    {
+        if ($this->userId === null) {
+            throw new NoPermissionException('Authentication required');
+        }
+
+        try {
+            $qb = $this->db->getQueryBuilder();
+            $qb->select('role')
+                ->from('organization_members')
+                ->where($qb->expr()->eq('organization_id', $qb->createNamedParameter($organizationId, IQueryBuilder::PARAM_INT)))
+                ->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($this->userId, IQueryBuilder::PARAM_STR)))
+                ->setMaxResults(1);
+
+            $result = $qb->executeQuery();
+            $row = $result->fetch();
+            $result->closeCursor();
+
+            return is_array($row) ? $row : null;
+        } catch (\Throwable $e) {
+            throw new NoPermissionException('Unable to verify organization membership');
+        }
+    }
+
+    private function isGlobalAdmin(): bool
+    {
+        return $this->userId !== null && $this->groupManager->isAdmin($this->userId);
     }
 }

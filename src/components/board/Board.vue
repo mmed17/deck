@@ -298,13 +298,13 @@ export default {
             try {
                 await this.$store.dispatch('loadBoardById', this.id)
                 await this.$store.dispatch('loadStacks', this.id)
-                const routeCardId = parseInt(this.$route.params.cardId)
-                if (routeCardId && !this.$store.getters.cardById(routeCardId)) {
-                    await this.$store.dispatch('loadArchivedStacks', this.id)
-                    if (this.$store.getters.cardById(routeCardId)) {
-                        this.$store.commit('toggleShowArchived', true)
-                    }
-                }
+				const routeCardId = this.$route?.params?.cardId ? parseInt(this.$route.params.cardId, 10) : NaN
+				if (routeCardId && !this.$store.getters.cardById(routeCardId)) {
+					await this.$store.dispatch('loadArchivedStacks', this.id)
+					if (this.$store.getters.cardById(routeCardId)) {
+						this.$store.commit('toggleShowArchived', true)
+					}
+				}
                 this.session?.close()
                 this.session = createSession(this.id)
             } catch (e) {

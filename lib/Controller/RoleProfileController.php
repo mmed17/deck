@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace OCA\Deck\Controller;
 
+use OCA\Deck\NoPermissionException;
 use OCA\Deck\Service\RoleProfileService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -38,8 +39,12 @@ class RoleProfileController extends OCSController
     #[NoAdminRequired]
     public function index(int $organizationId): JSONResponse
     {
-        $profiles = $this->profileService->getProfiles($organizationId);
-        return new JSONResponse($profiles);
+        try {
+            $profiles = $this->profileService->getProfiles($organizationId);
+            return new JSONResponse($profiles);
+        } catch (NoPermissionException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
+        }
     }
 
     /**
@@ -54,6 +59,8 @@ class RoleProfileController extends OCSController
         try {
             $profile = $this->profileService->getProfile($profileId);
             return new JSONResponse($profile);
+        } catch (NoPermissionException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Profile not found'], Http::STATUS_NOT_FOUND);
         }
@@ -75,14 +82,18 @@ class RoleProfileController extends OCSController
             return new JSONResponse(['error' => 'Not authenticated'], Http::STATUS_UNAUTHORIZED);
         }
 
-        $profile = $this->profileService->createProfile(
-            $name,
-            $organizationId,
-            $user->getUID(),
-            $permissions
-        );
+        try {
+            $profile = $this->profileService->createProfile(
+                $name,
+                $organizationId,
+                $user->getUID(),
+                $permissions
+            );
 
-        return new JSONResponse($profile->jsonSerialize(), Http::STATUS_CREATED);
+            return new JSONResponse($profile->jsonSerialize(), Http::STATUS_CREATED);
+        } catch (NoPermissionException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
+        }
     }
 
     /**
@@ -101,14 +112,18 @@ class RoleProfileController extends OCSController
             return new JSONResponse(['error' => 'Not authenticated'], Http::STATUS_UNAUTHORIZED);
         }
 
-        $profile = $this->profileService->createProfileFromBoard(
-            $boardId,
-            $name,
-            $organizationId,
-            $user->getUID()
-        );
+        try {
+            $profile = $this->profileService->createProfileFromBoard(
+                $boardId,
+                $name,
+                $organizationId,
+                $user->getUID()
+            );
 
-        return new JSONResponse($profile->jsonSerialize(), Http::STATUS_CREATED);
+            return new JSONResponse($profile->jsonSerialize(), Http::STATUS_CREATED);
+        } catch (NoPermissionException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
+        }
     }
 
     /**
@@ -125,6 +140,8 @@ class RoleProfileController extends OCSController
         try {
             $result = $this->profileService->applyProfile($profileId, $boardId, $clearExisting);
             return new JSONResponse($result);
+        } catch (NoPermissionException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Profile not found'], Http::STATUS_NOT_FOUND);
         }
@@ -144,6 +161,8 @@ class RoleProfileController extends OCSController
         try {
             $profile = $this->profileService->updateProfile($profileId, $name, $permissions);
             return new JSONResponse($profile->jsonSerialize());
+        } catch (NoPermissionException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Profile not found'], Http::STATUS_NOT_FOUND);
         }
@@ -161,6 +180,8 @@ class RoleProfileController extends OCSController
         try {
             $this->profileService->deleteProfile($profileId);
             return new JSONResponse(['status' => 'deleted']);
+        } catch (NoPermissionException $e) {
+            return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_FORBIDDEN);
         } catch (DoesNotExistException $e) {
             return new JSONResponse(['error' => 'Profile not found'], Http::STATUS_NOT_FOUND);
         }
