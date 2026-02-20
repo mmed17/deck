@@ -117,6 +117,9 @@ class StackServiceTest extends TestCase {
 	public function testFindAll() {
 		$this->permissionService->expects($this->once())->method('checkPermission');
 		$this->stackMapper->expects($this->once())->method('findAll')->willReturn($this->getStacks());
+		$board = new \OCA\Deck\Db\Board();
+		$board->setOwner('user');
+		$this->boardMapper->expects($this->atLeastOnce())->method('find')->willReturn($board);
 		$this->cardService->expects($this->atLeastOnce())->method('enrichCards')->will(
 			$this->returnCallback(
 				function ($cards) {
@@ -132,7 +135,7 @@ class StackServiceTest extends TestCase {
 		$this->cardMapper->expects($this->any())->method('findAll')->willReturn($this->getCards(222));
 
 
-		$actual = $this->stackService->findAll(123);
+		$actual = $this->stackService->findAll('user', '123');
 		for ($stackId = 0; $stackId < 3; $stackId++) {
 			for ($cardId = 0;$cardId < 10;$cardId++) {
 				$this->assertEquals($actual[0]->getCards()[$cardId]->getId(), $cardId);
@@ -140,6 +143,28 @@ class StackServiceTest extends TestCase {
 				$this->assertEquals($actual[0]->getCards()[$cardId]->getLabels(), $this->getLabels()[$cardId]);
 			}
 		}
+	}
+
+	public function testFindAllReturnsOwnedCardsForNonOwner() {
+		$this->permissionService->expects($this->once())->method('checkPermission');
+		$this->stackMapper->expects($this->once())->method('findAll')->willReturn($this->getStacks());
+		$board = new \OCA\Deck\Db\Board();
+		$board->setOwner('board-owner');
+		$this->boardMapper->expects($this->atLeastOnce())->method('find')->willReturn($board);
+		$this->cardMapper->expects($this->atLeastOnce())
+			->method('findOwnedOrAssignedToUserInStack')
+			->willReturn($this->getCards(222));
+		$this->cardService->expects($this->atLeastOnce())->method('enrichCards')->will(
+			$this->returnCallback(function ($cards) {
+				return array_map(function ($card) {
+					return new CardDetails($card);
+				}, $cards);
+			})
+		);
+
+		$actual = $this->stackService->findAll('user', '123');
+		$this->assertCount(2, $actual);
+		$this->assertNotEmpty($actual[0]->getCards());
 	}
 
 	public function testFindAllArchived() {

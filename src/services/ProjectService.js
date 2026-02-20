@@ -22,4 +22,20 @@ export class ProjectService {
                 return Promise.reject(err)
             })
     }
+
+    /**
+     * Get timeline items for a project
+     *
+     * @param {number} projectId
+     * @return {Promise}
+     */
+    getTimelineByProjectId(projectId) {
+        return axios.get(generateUrl(`/apps/projectcreatoraio/api/v1/projects/${projectId}/timeline`))
+            .then((response) => {
+                return Promise.resolve(response.data)
+            })
+            .catch((err) => {
+                return Promise.reject(err)
+            })
+    }
 }

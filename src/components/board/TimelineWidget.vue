@@ -5,39 +5,47 @@
         <div class="skeleton-footer"></div>
     </div>
 
-    <div v-else-if="hasProjectData" class="timeline-widget-saas">
-        <div class="widget-header">
-            <div class="header-left">
-                <span class="status-badge" :class="statusClass">{{ statusText }}</span>
-            </div>
-            <div class="header-right">
-                <span class="percentage-value" :class="statusClass">{{ Math.round(progressPercentage) }}%</span>
-            </div>
-        </div>
-
-        <div class="widget-body">
-            <div class="progress-track">
-                <div class="progress-fill" 
-                     :class="statusClass" 
-                     :style="{ width: progressPercentage + '%' }">
+    <div v-else class="timeline-widget-saas">
+        <template v-if="hasProjectData">
+            <div class="widget-header">
+                <div class="header-left">
+                    <span class="status-badge" :class="statusClass">{{ statusText }}</span>
+                </div>
+                <div class="header-right">
+                    <span class="percentage-value" :class="statusClass">{{ Math.round(progressPercentage) }}%</span>
                 </div>
             </div>
-        </div>
 
-        <div class="widget-footer">
-            <div class="date-group">
-                <span class="date-label">Start Date</span>
-                <span class="date-value">{{ formatDate(project.date_start) }}</span>
-            </div>
-            
-            <div class="day-tracker-pill" :class="statusClass">
-                {{ dayTrackerText }}
+            <div class="widget-body">
+                <div class="progress-track">
+                    <div class="progress-fill" 
+                         :class="statusClass" 
+                         :style="{ width: progressPercentage + '%' }">
+                    </div>
+                </div>
             </div>
 
-            <div class="date-group align-right">
-                <span class="date-label">Target Date</span>
-                <span class="date-value">{{ formatDate(project.date_end) }}</span>
+            <div class="widget-footer">
+                <div class="date-group">
+                    <span class="date-label">Start Date</span>
+                    <span class="date-value">{{ formatDate(timelineRange.start) }}</span>
+                </div>
+                
+                <div class="day-tracker-pill" :class="statusClass">
+                    {{ dayTrackerText }}
+                </div>
+
+                <div class="date-group align-right">
+                    <span class="date-label">Target Date</span>
+                    <span class="date-value">{{ formatDate(timelineRange.end) }}</span>
+                </div>
             </div>
+        </template>
+
+        <div v-else class="empty-state">
+            <div class="empty-title">Timeline not set</div>
+            <div v-if="error" class="empty-hint">Timeline could not be loaded</div>
+            <div v-else class="empty-hint">Add timeline items to the project to see progress here.</div>
         </div>
     </div>
 </template>
@@ -53,18 +61,39 @@ export default {
     data() {
         return {
             project: null,
+            timelineItems: [],
             loading: true,
             error: null,
         }
     },
     computed: {
+        timelineRange() {
+            const items = Array.isArray(this.timelineItems) ? this.timelineItems : []
+            let minStart = null
+            let maxEnd = null
+            for (const item of items) {
+                const start = this.parseDate(item?.startDate)
+                if (start === null) {
+                    continue
+                }
+                const end = this.parseDate(item?.endDate ?? item?.startDate) ?? start
+
+                minStart = (minStart === null) ? start : Math.min(minStart, start)
+                maxEnd = (maxEnd === null) ? end : Math.max(maxEnd, end)
+            }
+
+            return {
+                start: minStart,
+                end: maxEnd,
+            }
+        },
         hasProjectData() {
-            return this.project && this.project.date_start && this.project.date_end
+            return this.timelineRange.start !== null && this.timelineRange.end !== null
         },
         progressPercentage() {
             if (!this.hasProjectData) return 0
-            const start = new Date(this.project.date_start).getTime()
-            const end = new Date(this.project.date_end).getTime()
+            const start = this.timelineRange.start
+            const end = this.timelineRange.end
             const now = new Date().getTime()
 
             if (now < start) return 0
@@ -77,8 +106,8 @@ export default {
         dates() {
             if (!this.hasProjectData) return {}
             return {
-                start: new Date(this.project.date_start).getTime(),
-                end: new Date(this.project.date_end).getTime(),
+                start: this.timelineRange.start,
+                end: this.timelineRange.end,
                 now: new Date().getTime()
             }
         },
@@ -119,15 +148,48 @@ export default {
             return `${days} days left`
         },
     },
+    watch: {
+        boardId() {
+            this.fetchTimeline()
+        },
+    },
     mounted() {
-        this.fetchProject()
+        this.fetchTimeline()
     },
     methods: {
-        async fetchProject() {
+        parseDate(value) {
+            if (!value) {
+                return null
+            }
+
+            const str = String(value).trim()
+            if (str === '') {
+                return null
+            }
+
+            const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/.exec(str)
+            if (m) {
+                const year = Number(m[1])
+                const month = Number(m[2])
+                const day = Number(m[3])
+                return new Date(year, month - 1, day).getTime()
+            }
+
+            const t = Date.parse(str)
+            return Number.isNaN(t) ? null : t
+        },
+        async fetchTimeline() {
             this.loading = true
             try {
                 const service = new ProjectService()
+                this.error = null
                 this.project = await service.getProjectByBoardId(this.boardId)
+                this.timelineItems = []
+
+                const projectId = this.project?.id
+                if (projectId !== null && projectId !== undefined) {
+                    this.timelineItems = await service.getTimelineByProjectId(projectId)
+                }
             } catch (e) {
                 console.error('Failed to load project details', e)
                 this.error = e
@@ -136,8 +198,9 @@ export default {
             }
         },
         formatDate(dateString) {
-            if (!dateString) return ''
-            return new Date(dateString).toLocaleDateString(undefined, { 
+            if (dateString === null || dateString === undefined || dateString === '') return ''
+            const date = (typeof dateString === 'number') ? new Date(dateString) : new Date(String(dateString))
+            return date.toLocaleDateString(undefined, { 
                 year: 'numeric', 
                 month: 'short', 
                 day: 'numeric' 
@@ -294,6 +357,28 @@ $color-upcoming: #64748b; /* Slate */
     
     &.status-overdue { background: #fef2f2; color: $color-overdue; font-weight: 600; }
     &.status-critical { background: #fffbeb; color: $color-critical; font-weight: 600; }
+}
+
+/* --- EMPTY STATE --- */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.empty-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: $text-main;
+}
+
+.empty-hint {
+    font-size: 13px;
+    color: $text-muted;
+    text-align: center;
 }
 
 /* --- SKELETON LOADING --- */

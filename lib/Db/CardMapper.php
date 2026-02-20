@@ -154,7 +154,7 @@ class CardMapper extends QBMapper implements IPermissionMapper {
      * @param int $since
      * @return array
      */
-    public function findAssignedToUserInStack(int $stackId, string $userId, $limit = null, $offset = null, int $since = -1): array {
+	public function findAssignedToUserInStack(int $stackId, string $userId, $limit = null, $offset = null, int $since = -1): array {
         $qb = $this->db->getQueryBuilder();
         $qb->select('c.*')
             ->from('deck_cards', 'c')
@@ -199,6 +199,36 @@ class CardMapper extends QBMapper implements IPermissionMapper {
 			->andWhere($qb->expr()->lt('deleted_at', $qb->createNamedParameter($timeLimit, IQueryBuilder::PARAM_INT)))
 			->orderBy('deleted_at')
 			->setMaxResults($limit);
+		return $this->findEntities($qb);
+	}
+
+	/**
+	 * Finds all cards within a stack that are either owned by the given user
+	 * (created by them) or explicitly assigned to them.
+	 */
+	public function findOwnedOrAssignedToUserInStack(int $stackId, string $userId, $limit = null, $offset = null, int $since = -1): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->selectDistinct('c.*')
+			->from('deck_cards', 'c')
+			->leftJoin('c', 'deck_assigned_users', 'a', $qb->expr()->eq('c.id', 'a.card_id'))
+			->where($qb->expr()->eq('c.stack_id', $qb->createNamedParameter($stackId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('c.archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
+			->andWhere($qb->expr()->eq('c.deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->gt('c.last_modified', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)))
+			->andWhere(
+				$qb->expr()->orX(
+					$qb->expr()->eq('c.owner', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)),
+					$qb->expr()->andX(
+						$qb->expr()->eq('a.participant', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)),
+						$qb->expr()->eq('a.type', $qb->createNamedParameter(Assignment::TYPE_USER, IQueryBuilder::PARAM_INT))
+					)
+				)
+			)
+			->setMaxResults($limit)
+			->setFirstResult($offset)
+			->orderBy('c.order')
+			->addOrderBy('c.id');
+
 		return $this->findEntities($qb);
 	}
 
