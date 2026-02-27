@@ -75,19 +75,18 @@ return [
 		['name' => 'label#delete', 'url' => '/labels/{labelId}', 'verb' => 'DELETE'],
 
 
-		// stack transition permissions
-		['name' => 'stack_transition_permission#index', 'url' => '/boards/{boardId}/transition-permissions', 'verb' => 'GET'],
-		['name' => 'stack_transition_permission#create', 'url' => '/boards/{boardId}/transition-permissions', 'verb' => 'POST'],
-		['name' => 'stack_transition_permission#destroy', 'url' => '/transition-permissions/{id}', 'verb' => 'DELETE'],
-
-		// role profiles
-		['name' => 'role_profile#index', 'url' => '/organizations/{organizationId}/role-profiles', 'verb' => 'GET'],
-		['name' => 'role_profile#show', 'url' => '/role-profiles/{profileId}', 'verb' => 'GET'],
-		['name' => 'role_profile#create', 'url' => '/organizations/{organizationId}/role-profiles', 'verb' => 'POST'],
-		['name' => 'role_profile#update', 'url' => '/role-profiles/{profileId}', 'verb' => 'PUT'],
-		['name' => 'role_profile#destroy', 'url' => '/role-profiles/{profileId}', 'verb' => 'DELETE'],
-		['name' => 'role_profile#createFromBoard', 'url' => '/boards/{boardId}/export-role-profile', 'verb' => 'POST'],
-		['name' => 'role_profile#applyToBoard', 'url' => '/boards/{boardId}/apply-role-profile/{profileId}', 'verb' => 'POST'],
+		// card policy (board roles + per-card permissions)
+		['name' => 'card_policy#index', 'url' => '/boards/{boardId}/card-policy', 'verb' => 'GET'],
+		['name' => 'card_policy#enable', 'url' => '/boards/{boardId}/card-policy/enable', 'verb' => 'POST'],
+		['name' => 'card_policy#updateSettings', 'url' => '/boards/{boardId}/card-policy/settings', 'verb' => 'PUT'],
+		['name' => 'card_policy#updateDefaults', 'url' => '/boards/{boardId}/card-policy/defaults', 'verb' => 'PUT'],
+		['name' => 'card_policy#setCardPolicy', 'url' => '/boards/{boardId}/card-policy/cards/{cardId}', 'verb' => 'PUT'],
+		['name' => 'card_policy#clearCardPolicy', 'url' => '/boards/{boardId}/card-policy/cards/{cardId}', 'verb' => 'DELETE'],
+		['name' => 'card_policy#addMembership', 'url' => '/boards/{boardId}/card-policy/memberships', 'verb' => 'POST'],
+		['name' => 'card_policy#deleteMembership', 'url' => '/boards/{boardId}/card-policy/memberships/{membershipId}', 'verb' => 'DELETE'],
+		['name' => 'card_policy#createRole', 'url' => '/boards/{boardId}/card-policy/roles', 'verb' => 'POST'],
+		['name' => 'card_policy#updateRole', 'url' => '/boards/{boardId}/card-policy/roles/{roleId}', 'verb' => 'PUT'],
+		['name' => 'card_policy#deleteRole', 'url' => '/boards/{boardId}/card-policy/roles/{roleId}', 'verb' => 'DELETE'],
 
 		// notes api
 		['name' => 'note_api#index', 'url' => '/api/v{apiVersion}/cards/{cardId}/notes', 'verb' => 'GET'],

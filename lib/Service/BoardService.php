@@ -60,6 +60,7 @@ class BoardService
 		private BoardMapper $boardMapper,
 		private StackMapper $stackMapper,
 		private CardMapper $cardMapper,
+		private CardPolicyService $cardPolicyService,
 		private IConfig $config,
 		private IL10N $l10n,
 		private LabelMapper $labelMapper,
@@ -235,16 +236,29 @@ class BoardService
 			$this->l10n->t('Approved/Done')
 		];
 		$stacks = [];
+		$approvedStackId = null;
 		foreach ($default_stacks as $index => $stackTitle) {
 			$stack = new Stack();
 			$stack->setTitle($stackTitle);
 			$stack->setOrder($index);
 			$stack->setBoardId($new_board->getId());
+			$stack = $this->stackMapper->insert($stack);
 			$stacks[] = $stack;
-			$this->stackMapper->insert($stack);
+			if ($index === count($default_stacks) - 1) {
+				$approvedStackId = (int) $stack->getId();
+			}
 		}
 
 		$new_board->setStacks($stacks);
+
+		// Persist approved stack ID (stack reorder safe).
+		if ($approvedStackId !== null && $approvedStackId > 0) {
+			try {
+				$this->cardPolicyService->ensureBoardSettings((int) $new_board->getId(), $approvedStackId);
+			} catch (\Throwable $e) {
+				// Board creation must not fail because of policy settings.
+			}
+		}
 
 		// create new labels
 		$default_labels = [

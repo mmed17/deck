@@ -24,15 +24,15 @@
                 </div>
             </div>
 
-            <div v-if="board && board.permissions.PERMISSION_MANAGE" class="saas-section">
-                <div class="saas-section-header clickable" @click="toggleSection('permissions')">
-                    <h3>{{ t('deck', 'Permissions') }}</h3>
-                    <ChevronDown class="section-icon" :class="{ 'is-collapsed': sectionState.permissions }" />
-                </div>
-                <div v-show="!sectionState.permissions" class="section-content">
-                    <TransitionPermissionsManager :board-id="board.id" :organization-id="organizationId" />
-                </div>
-            </div>
+			<div v-if="board && board.permissions.PERMISSION_MANAGE" class="saas-section">
+				<div class="saas-section-header clickable" @click="toggleSection('permissions')">
+					<h3>{{ t('deck', 'Permissions') }}</h3>
+					<ChevronDown class="section-icon" :class="{ 'is-collapsed': sectionState.permissions }" />
+				</div>
+				<div v-show="!sectionState.permissions" class="section-content">
+					<CardPolicyManager :board-id="board.id" />
+				</div>
+			</div>
 
             <transition name="fade" mode="out-in">
                 <div v-if="loading" key="loading" class="emptycontent">
@@ -181,30 +181,30 @@ import { createSession } from '../../sessions.js'
 import CardSidebar from '../card/CardSidebar.vue'
 import TimelineWidget from './TimelineWidget.vue'
 import ReportingDashboard from './ReportingDashboard.vue'
-import TransitionPermissionsManager from './TransitionPermissionsManager.vue'
+import CardPolicyManager from './CardPolicyManager.vue'
 
 export default {
     name: 'Board',
-    components: {
-        GlobalSearchResults,
-        Controls,
-        Container,
-        DeckIcon,
-        Draggable,
-        Stack,
-        NcEmptyContent,
-        NcModal,
-        NcTextField,
-        NcButton,
-        NcLoadingIcon,
-        NcSelect,
-        CheckIcon,
-        ChevronDown, 
-        CardSidebar,
-        TimelineWidget,
-        ReportingDashboard,
-        TransitionPermissionsManager,
-    },
+		components: {
+			GlobalSearchResults,
+			Controls,
+			Container,
+			DeckIcon,
+			Draggable,
+			Stack,
+			NcEmptyContent,
+			NcModal,
+			NcTextField,
+			NcButton,
+			NcLoadingIcon,
+			NcSelect,
+			CheckIcon,
+			ChevronDown, 
+			CardSidebar,
+			TimelineWidget,
+			ReportingDashboard,
+			CardPolicyManager,
+		},
     inject: ['boardApi'],
     props: {
         id: { type: Number, default: null },
@@ -226,10 +226,10 @@ export default {
             // Assignment modal
             showAssignmentModal: false,
             selectedAssignee: null,
-            // Organization ID for role profiles
-            organizationId: null,
-        }
-    },
+			// Organization ID for external integrations
+			organizationId: null,
+		}
+	},
     computed: {
         ...mapState({
             isFullApp: state => state.isFullApp,
