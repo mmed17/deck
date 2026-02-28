@@ -35,6 +35,8 @@ class StackService {
 	private PermissionService $permissionService;
 	private BoardService $boardService;
 	private CardService $cardService;
+	private ?CardPolicyService $cardPolicyService;
+	private ?string $userId;
 	private AssignmentMapper $assignedUsersMapper;
 	private AttachmentService $attachmentService;
 	private ActivityManager $activityManager;
@@ -58,6 +60,8 @@ class StackService {
 		LoggerInterface $logger,
 		IEventDispatcher $eventDispatcher,
 		StackServiceValidator $stackServiceValidator,
+		?CardPolicyService $cardPolicyService = null,
+		?string $userId = null,
 	) {
 		$this->stackMapper = $stackMapper;
 		$this->boardMapper = $boardMapper;
@@ -66,6 +70,8 @@ class StackService {
 		$this->permissionService = $permissionService;
 		$this->boardService = $boardService;
 		$this->cardService = $cardService;
+		$this->cardPolicyService = $cardPolicyService;
+		$this->userId = $userId;
 		$this->assignedUsersMapper = $assignedUsersMapper;
 		$this->attachmentService = $attachmentService;
 		$this->activityManager = $activityManager;
@@ -76,25 +82,37 @@ class StackService {
 	}
 
 	private function enrichStackWithCards($userId, $stack, $since = -1) {
-        $cards = [];
+		$cards = [];
 		$board = $this->boardMapper->find($stack->getBoardId());
 
-        if ($board->getOwner() === $userId) {
-            $cards = $this->cardMapper->findAll(
-				$stack->getId(), 
-				null, 
-				null, 
+		$boardId = (int) $stack->getBoardId();
+		$stackId = (int) $stack->getId();
+		$isCardPolicy = $this->cardPolicyService !== null && $boardId > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardId);
+
+		if ($isCardPolicy) {
+			$cards = $this->cardMapper->findAll(
+				$stackId,
+				null,
+				null,
 				$since
 			);
-        } else {
+			$cards = $this->cardPolicyService->filterCardsForUser($boardId, (string) $userId, $cards);
+		} elseif ($board->getOwner() === $userId) {
+			$cards = $this->cardMapper->findAll(
+				$stackId,
+				null,
+				null,
+				$since
+			);
+		} else {
 			$cards = $this->cardMapper->findOwnedOrAssignedToUserInStack(
-				$stack->getId(),
+				$stackId,
 				$userId,
 				null,
 				null,
 				$since
 			);
-        }
+		}
 
         if (\count($cards) === 0) {
             return;
@@ -124,6 +142,12 @@ class StackService {
 
 		$this->permissionService->checkPermission($this->stackMapper, $stackId, Acl::PERMISSION_READ);
 		$stack = $this->stackMapper->find($stackId);
+		$boardId = (int) $stack->getBoardId();
+
+		$cards = $this->cardMapper->findAll($stackId);
+		if ($this->cardPolicyService !== null && $boardId > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardId)) {
+			$cards = $this->cardPolicyService->filterCardsForUser($boardId, $this->userId, $cards);
+		}
 
 		$cards = array_map(
 			function (Card $card): CardDetails {
@@ -133,7 +157,7 @@ class StackService {
 
 				return new CardDetails($card);
 			},
-			$this->cardMapper->findAll($stackId)
+			$cards
 		);
 
 		$stack->setCards($cards);
@@ -197,6 +221,9 @@ class StackService {
 		$labels = $this->labelMapper->getAssignedLabelsForBoard($boardId);
 		foreach ($stacks as $stackIndex => $stack) {
 			$cards = $this->cardMapper->findAllArchived($stack->id);
+			if ($this->cardPolicyService !== null && $this->cardPolicyService->isCardPolicyEnabled((int) $boardId)) {
+				$cards = $this->cardPolicyService->filterCardsForUser((int) $boardId, $this->userId, $cards);
+			}
 			foreach ($cards as $cardIndex => $card) {
 				if (array_key_exists($card->id, $labels)) {
 					$cards[$cardIndex]->setLabels($labels[$card->id]);

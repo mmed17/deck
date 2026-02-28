@@ -37,16 +37,18 @@
                     title="Overdue"
                     :value="overdueTasks"
                     icon="alert"
-                    color="#ef4444"
+                    color="#f97316"
                     suffix="Tasks"
                 />
-                <KpiCard
-                    title="Team Members"
-                    :value="teamMembers"
-                    icon="group"
-                    color="#8b5cf6"
-                    suffix="Members"
-                />
+                <KpiBreakdownCard
+                    title="Open Tasks"
+                    :left-label="'Important'"
+                    :left-value="importantOpenTasks"
+                    :left-color="'#dc2626'"
+                    :right-label="'Other'"
+                    :right-value="otherOpenTasks"
+                    :right-color="'#334155'"
+                    icon-color="#3b82f6" />
             </div>
 
             <div class="saas-charts-grid">
@@ -81,12 +83,13 @@
 <script>
 import { mapState, mapGetters } from 'vuex'
 import KpiCard from './reports/KpiCard.vue'
+import KpiBreakdownCard from './reports/KpiBreakdownCard.vue'
 import CircleProgress from './reports/CircleProgress.vue'
 import BarChart from './reports/BarChart.vue'
 
 export default {
     name: 'ReportingDashboard',
-    components: { KpiCard, CircleProgress, BarChart },
+    components: { KpiCard, KpiBreakdownCard, CircleProgress, BarChart },
     data() {
         return {
             currentTime: Date.now(),
@@ -128,17 +131,7 @@ export default {
         },
         
         completedTasks() {
-            return this.cards.filter(card => {
-                // Check if card is marked as done via the done property
-                if (card.done !== null) return true
-                
-                // Check if card is in a "done" stack by stack name
-                const stack = this.stacks.find(s => s.id === card.stackId)
-                if (!stack) return false
-                
-                const doneStackNames = ['Done', 'Approved/Done', 'Approved / Done']
-                return doneStackNames.includes(stack.title)
-            }).length
+            return this.cards.filter(card => this.isCardDone(card)).length
         },
         
         overdueTasks() {
@@ -146,23 +139,20 @@ export default {
                 // Cards without due dates cannot be overdue
                 if (!card.duedate) return false
                 
-                // Completed cards should not count as overdue
-                if (card.done !== null) return false
-                
-                // Check if card is in a "done" stack
-                const stack = this.stacks.find(s => s.id === card.stackId)
-                if (stack) {
-                    const doneStackNames = ['Done', 'Approved/Done', 'Approved / Done']
-                    if (doneStackNames.includes(stack.title)) return false
-                }
+                // Completed/closed cards should not count as overdue
+                if (!this.isCardOpen(card)) return false
                 
                 // Calculate overdue status in real-time (client-side)
                 return this.isCardOverdue(card)
             }).length
         },
-        
-        teamMembers() {
-            return this.board?.users?.length || 0
+
+        importantOpenTasks() {
+            return this.cards.filter(card => this.isCardOpen(card) && this.hasImportantLabel(card)).length
+        },
+
+        otherOpenTasks() {
+            return this.cards.filter(card => this.isCardOpen(card) && !this.hasImportantLabel(card)).length
         },
         
         progressPercent() {
@@ -185,6 +175,26 @@ export default {
         }
     },
     methods: {
+        getCardStack(card) {
+            return this.stacks.find(s => s.id === card.stackId) || null
+        },
+        isCardDone(card) {
+            if (card.done !== null) return true
+            const stack = this.getCardStack(card)
+            if (!stack) return false
+            const doneStackNames = ['Done', 'Approved/Done', 'Approved / Done']
+            return doneStackNames.includes(stack.title)
+        },
+        isCardOpen(card) {
+            if (card.archived === true) return false
+            return !this.isCardDone(card)
+        },
+        hasImportantLabel(card) {
+            const labels = Array.isArray(card?.labels) ? card.labels : []
+            if (labels.length === 0) return false
+            const importantTitles = ['belangrijk', 'important']
+            return labels.some((l) => importantTitles.includes(String(l?.title ?? '').trim().toLowerCase()))
+        },
         /**
          * Calculate if a card is overdue based on its due date and time
          * Includes hours, minutes, and seconds for precise calculation

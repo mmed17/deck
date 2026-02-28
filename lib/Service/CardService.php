@@ -154,6 +154,11 @@ class CardService
 	public function find(int $cardId)
 	{
 		$this->permissionService->checkPermission($this->cardMapper, $cardId, Acl::PERMISSION_READ);
+
+		$boardIdForPolicy = (int) ($this->cardMapper->findBoardId($cardId) ?? 0);
+		if ($boardIdForPolicy > 0) {
+			$this->cardPolicyService->assertUserAllowedToViewCard($boardIdForPolicy, $cardId, $this->userId);
+		}
 		$card = $this->cardMapper->find($cardId);
 		[$card] = $this->enrichCards([$card]);
 

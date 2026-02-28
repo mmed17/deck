@@ -10,6 +10,15 @@ export default {
 	computed: {
 		labelStyle() {
 			return (label) => {
+				const title = String(label?.title ?? '').trim().toLowerCase()
+				const importantTitles = ['important', 'belangrijk']
+				if (importantTitles.includes(title)) {
+					return {
+						backgroundColor: '#ffffff',
+						color: 'var(--color-error-text)',
+						border: '1px solid var(--color-error-text)',
+					}
+				}
 				return {
 					backgroundColor: '#' + label.color,
 					color: this.textColor(label.color),

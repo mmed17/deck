@@ -35,6 +35,15 @@ class CardPolicyService
 {
 	public const ACTION_MOVE = BoardPolicyDefaultRole::ACTION_MOVE;
 	public const ACTION_APPROVE = BoardPolicyDefaultRole::ACTION_APPROVE;
+	// Future: separate action for visibility (not wired to UI yet)
+	public const ACTION_VIEW = 'view';
+
+	/** @var array<string, int[]> */
+	private array $userRoleIdsCache = [];
+	/** @var array<int, int[]> */
+	private array $defaultUnionRoleIdsCache = [];
+	/** @var array<string, bool> */
+	private array $fullVisibilityCache = [];
 
 	/**
 	 * Default roles for new card_policy boards.
@@ -68,6 +77,147 @@ class CardPolicyService
 		$setting = $this->findSettingOrNull($boardId);
 		return $setting instanceof BoardPolicySetting
 			&& $setting->getPermissionMode() === BoardPolicySetting::MODE_CARD_POLICY;
+	}
+
+	/**
+	 * Card visibility for card-policy boards.
+	 *
+	 * For now visibility is derived from roles configured for move/approve:
+	 * - users can see a card if they match ANY role that is allowed to move OR approve the card
+	 * - board owners / board managers / project owner / organization admins can see everything
+	 */
+	public function assertUserAllowedToViewCard(int $boardId, int $cardId, ?string $userId = null): void
+	{
+		$uid = $this->resolveUserId($userId);
+		if ($uid === '') {
+			throw new NoPermissionException('Permission denied');
+		}
+
+		$setting = $this->findSettingOrNull($boardId);
+		if (!$setting instanceof BoardPolicySetting || $setting->getPermissionMode() !== BoardPolicySetting::MODE_CARD_POLICY) {
+			return;
+		}
+
+		if ($this->userHasFullVisibilityForBoard($boardId, $uid)) {
+			return;
+		}
+
+		$explicitViewRoleIds = $this->getExplicitRoleIdsForCardAndAction($boardId, $cardId, self::ACTION_VIEW);
+		$defaultViewRoleIds = $this->getDefaultRoleIdsForAction($boardId, self::ACTION_VIEW);
+		$allowedRoleIds = $explicitViewRoleIds !== []
+			? $explicitViewRoleIds
+			: ($defaultViewRoleIds !== []
+				? $defaultViewRoleIds
+				: array_values(array_unique(array_merge(
+					$this->getEffectiveRoleIdsForCard($boardId, $cardId, self::ACTION_MOVE),
+					$this->getEffectiveRoleIdsForCard($boardId, $cardId, self::ACTION_APPROVE),
+				))));
+		$allowedRoleIds = array_values(array_filter($allowedRoleIds, static fn (int $id) => $id > 0));
+		if ($allowedRoleIds === []) {
+			throw new NoPermissionException('Permission denied');
+		}
+
+		$memberships = $this->membershipMapper->findByBoardAndRoleIds($boardId, $allowedRoleIds);
+		foreach ($memberships as $membership) {
+			if ($this->membershipMatchesUser($membership, $uid)) {
+				return;
+			}
+		}
+
+		throw new NoPermissionException('Permission denied');
+	}
+
+	/**
+	 * @return int[]
+	 */
+	private function getExplicitRoleIdsForCardAndAction(int $boardId, int $cardId, string $action): array
+	{
+		$policy = $this->cardPolicyMapper->findByBoardAndCard($boardId, $cardId);
+		if (!$policy instanceof CardPolicy) {
+			return [];
+		}
+		$roles = $this->cardPolicyRoleMapper->findByPolicyAndAction((int) $policy->getId(), $action);
+		$roleIds = array_map(static fn (CardPolicyRole $r) => (int) $r->getRoleId(), $roles);
+		return array_values(array_unique(array_filter($roleIds, static fn (int $id) => $id > 0)));
+	}
+
+	/**
+	 * Filters card entities to only those visible to the user.
+	 *
+	 * @param array<int, object> $cards expects objects with getId()
+	 * @return array<int, object>
+	 */
+	public function filterCardsForUser(int $boardId, ?string $userId, array $cards): array
+	{
+		$uid = $this->resolveUserId($userId);
+		if ($uid === '' || $cards === []) {
+			return [];
+		}
+
+		$setting = $this->findSettingOrNull($boardId);
+		if (!$setting instanceof BoardPolicySetting || $setting->getPermissionMode() !== BoardPolicySetting::MODE_CARD_POLICY) {
+			return $cards;
+		}
+
+		if ($this->userHasFullVisibilityForBoard($boardId, $uid)) {
+			return $cards;
+		}
+
+		$userRoleIds = $this->getUserRoleIdsForBoard($boardId, $uid);
+		if ($userRoleIds === []) {
+			return [];
+		}
+
+		$defaultAllowedRoleIds = $this->getDefaultUnionRoleIds($boardId);
+		$defaultViewRoleIds = $this->getDefaultRoleIdsForAction($boardId, self::ACTION_VIEW);
+		$cardIds = [];
+		foreach ($cards as $card) {
+			if (!is_object($card) || !method_exists($card, 'getId')) {
+				continue;
+			}
+			$cardId = (int) $card->getId();
+			if ($cardId > 0) {
+				$cardIds[] = $cardId;
+			}
+		}
+		$cardIds = array_values(array_unique($cardIds));
+		if ($cardIds === []) {
+			return [];
+		}
+
+		$explicitAllowedByCardId = $this->getExplicitRoleIdsForCardsAndActions($boardId, $cardIds, [self::ACTION_MOVE, self::ACTION_APPROVE]);
+		$explicitViewByCardId = $this->getExplicitRoleIdsForCardsAndActions($boardId, $cardIds, [self::ACTION_VIEW]);
+
+		$out = [];
+		$userRoleSet = array_fill_keys($userRoleIds, true);
+		foreach ($cards as $card) {
+			if (!is_object($card) || !method_exists($card, 'getId')) {
+				continue;
+			}
+			$cardId = (int) $card->getId();
+			if ($cardId <= 0) {
+				continue;
+			}
+
+			if (isset($explicitViewByCardId[$cardId])) {
+				$allowed = $explicitViewByCardId[$cardId];
+			} elseif ($defaultViewRoleIds !== []) {
+				$allowed = $defaultViewRoleIds;
+			} else {
+				$allowed = $explicitAllowedByCardId[$cardId] ?? $defaultAllowedRoleIds;
+			}
+			if ($allowed === []) {
+				continue;
+			}
+			foreach ($allowed as $rid) {
+				if (isset($userRoleSet[$rid])) {
+					$out[] = $card;
+					break;
+				}
+			}
+		}
+
+		return $out;
 	}
 
 	public function getApprovedStackId(int $boardId): ?int
@@ -180,7 +330,7 @@ class CardPolicyService
 	}
 
 	/**
-	 * @return array{move: string[], approve: string[]}
+	 * @return array{move: string[], approve: string[], view: string[]}
 	 */
 	public function getDefaultRoleKeysByAction(int $boardId): array
 	{
@@ -190,7 +340,7 @@ class CardPolicyService
 		foreach ($roles as $r) {
 			$roleKeyById[(int) $r->getId()] = (string) $r->getRoleKey();
 		}
-		$out = ['move' => [], 'approve' => []];
+		$out = ['move' => [], 'approve' => [], 'view' => []];
 		foreach ($defaults as $d) {
 			$action = (string) $d->getAction();
 			$roleId = (int) $d->getRoleId();
@@ -201,13 +351,14 @@ class CardPolicyService
 		}
 		$out['move'] = array_values(array_unique($out['move']));
 		$out['approve'] = array_values(array_unique($out['approve']));
+		$out['view'] = array_values(array_unique($out['view']));
 		return $out;
 	}
 
 	/**
 	 * Returns explicit per-card policies keyed by cardId.
 	 *
-	 * @return array<int, array{move: string[], approve: string[]}>
+	 * @return array<int, array{move: string[], approve: string[], view: string[]}>
 	 */
 	public function getExplicitCardPoliciesByBoard(int $boardId): array
 	{
@@ -227,11 +378,11 @@ class CardPolicyService
 			$cardId = (int) ($row['card_id'] ?? 0);
 			$action = (string) ($row['action'] ?? '');
 			$roleKey = (string) ($row['role_key'] ?? '');
-			if ($cardId <= 0 || ($action !== self::ACTION_MOVE && $action !== self::ACTION_APPROVE) || $roleKey === '') {
+			if ($cardId <= 0 || ($action !== self::ACTION_MOVE && $action !== self::ACTION_APPROVE && $action !== self::ACTION_VIEW) || $roleKey === '') {
 				continue;
 			}
 			if (!isset($out[$cardId])) {
-				$out[$cardId] = ['move' => [], 'approve' => []];
+				$out[$cardId] = ['move' => [], 'approve' => [], 'view' => []];
 			}
 			$out[$cardId][$action][] = $roleKey;
 		}
@@ -240,6 +391,7 @@ class CardPolicyService
 		foreach ($out as $cardId => $actions) {
 			$out[$cardId]['move'] = array_values(array_unique($actions['move'] ?? []));
 			$out[$cardId]['approve'] = array_values(array_unique($actions['approve'] ?? []));
+			$out[$cardId]['view'] = array_values(array_unique($actions['view'] ?? []));
 		}
 		return $out;
 	}
@@ -256,29 +408,34 @@ class CardPolicyService
 	/**
 	 * @param string[] $moveRoleKeys
 	 * @param string[] $approveRoleKeys
+	 * @param string[] $viewRoleKeys
 	 */
-	public function setBoardDefaultRolesByKeys(int $boardId, array $moveRoleKeys, array $approveRoleKeys): void
+	public function setBoardDefaultRolesByKeys(int $boardId, array $moveRoleKeys, array $approveRoleKeys, array $viewRoleKeys = []): void
 	{
 		$this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
 		$this->ensureDefaultRolesAndDefaults($boardId);
 
 		$moveRoleIds = $this->resolveRoleIdsByKeys($boardId, $moveRoleKeys);
 		$approveRoleIds = $this->resolveRoleIdsByKeys($boardId, $approveRoleKeys);
+		$viewRoleIds = $this->resolveRoleIdsByKeys($boardId, $viewRoleKeys);
 		$this->replaceDefaultRoles($boardId, self::ACTION_MOVE, $moveRoleIds);
 		$this->replaceDefaultRoles($boardId, self::ACTION_APPROVE, $approveRoleIds);
+		$this->replaceDefaultRoles($boardId, self::ACTION_VIEW, $viewRoleIds);
 	}
 
 	/**
 	 * @param string[] $moveRoleKeys
 	 * @param string[] $approveRoleKeys
+	 * @param string[] $viewRoleKeys
 	 */
-	public function setCardPolicyByRoleKeys(int $boardId, int $cardId, array $moveRoleKeys, array $approveRoleKeys): void
+	public function setCardPolicyByRoleKeys(int $boardId, int $cardId, array $moveRoleKeys, array $approveRoleKeys, array $viewRoleKeys = []): void
 	{
 		$this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
 		$this->ensureDefaultRolesAndDefaults($boardId);
 
 		$moveRoleIds = $this->resolveRoleIdsByKeys($boardId, $moveRoleKeys);
 		$approveRoleIds = $this->resolveRoleIdsByKeys($boardId, $approveRoleKeys);
+		$viewRoleIds = $this->resolveRoleIdsByKeys($boardId, $viewRoleKeys);
 
 		$policy = $this->cardPolicyMapper->findByBoardAndCard($boardId, $cardId);
 		$now = new DateTime('now');
@@ -296,6 +453,7 @@ class CardPolicyService
 
 		$this->replaceCardPolicyRoles((int) $policy->getId(), self::ACTION_MOVE, $moveRoleIds);
 		$this->replaceCardPolicyRoles((int) $policy->getId(), self::ACTION_APPROVE, $approveRoleIds);
+		$this->replaceCardPolicyRoles((int) $policy->getId(), self::ACTION_VIEW, $viewRoleIds);
 	}
 
 	public function clearCardPolicy(int $boardId, int $cardId): void
@@ -446,7 +604,7 @@ class CardPolicyService
 			return;
 		}
 
-		if ($this->permissionService->userIsBoardOwner($boardId, $userId)) {
+		if ($this->groupManager->isAdmin($userId) || $this->permissionService->userIsBoardOwner($boardId, $userId)) {
 			return;
 		}
 
@@ -467,6 +625,194 @@ class CardPolicyService
 		}
 
 		throw new NoPermissionException('You do not have permission to perform this action.');
+	}
+
+	private function resolveUserId(?string $userId): string
+	{
+		$userId = $userId !== null ? trim($userId) : trim((string) ($this->userId ?? ''));
+		return $userId;
+	}
+
+	/**
+	 * Project/organization aware bypass.
+	 */
+	private function userHasFullVisibilityForBoard(int $boardId, string $userId): bool
+	{
+		$userId = trim($userId);
+		if ($userId === '' || $boardId <= 0) {
+			return false;
+		}
+
+		$cacheKey = $boardId . ':' . $userId;
+		if (array_key_exists($cacheKey, $this->fullVisibilityCache)) {
+			return $this->fullVisibilityCache[$cacheKey];
+		}
+
+		$visible = false;
+		try {
+			if ($this->groupManager->isAdmin($userId)) {
+				$visible = true;
+			} elseif ($this->permissionService->userIsBoardOwner($boardId, $userId)) {
+				$visible = true;
+			} else {
+				$project = $this->findProjectByBoardId($boardId);
+				if ($project !== null) {
+					$ownerId = trim((string) ($project['owner_id'] ?? ''));
+					if ($ownerId !== '' && $ownerId === $userId) {
+						$visible = true;
+					} else {
+						$orgId = isset($project['organization_id']) ? (int) $project['organization_id'] : 0;
+						if ($orgId > 0 && $this->userIsOrganizationAdmin($userId, $orgId)) {
+							$visible = true;
+						}
+					}
+				}
+			}
+		} catch (\Throwable $e) {
+			$visible = false;
+		}
+
+		$this->fullVisibilityCache[$cacheKey] = $visible;
+		return $visible;
+	}
+
+	/**
+	 * @return array{owner_id:?string, organization_id:?int}|null
+	 */
+	private function findProjectByBoardId(int $boardId): ?array
+	{
+		try {
+			$qb = $this->db->getQueryBuilder();
+			$qb->select('owner_id', 'organization_id')
+				->from('custom_projects')
+				->where($qb->expr()->eq('board_id', $qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)))
+				->setMaxResults(1);
+
+			$result = $qb->executeQuery();
+			$row = $result->fetch();
+			$result->closeCursor();
+			if ($row === false) {
+				return null;
+			}
+			return [
+				'owner_id' => isset($row['owner_id']) ? (string) $row['owner_id'] : null,
+				'organization_id' => isset($row['organization_id']) && $row['organization_id'] !== null ? (int) $row['organization_id'] : null,
+			];
+		} catch (\Throwable $e) {
+			return null;
+		}
+	}
+
+	private function userIsOrganizationAdmin(string $userId, int $organizationId): bool
+	{
+		try {
+			$qb = $this->db->getQueryBuilder();
+			$qb->select('user_uid')
+				->from('organization_members')
+				->where($qb->expr()->eq('organization_id', $qb->createNamedParameter($organizationId, IQueryBuilder::PARAM_INT)))
+				->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userId, IQueryBuilder::PARAM_STR)))
+				->andWhere($qb->expr()->eq('role', $qb->createNamedParameter('admin', IQueryBuilder::PARAM_STR)))
+				->setMaxResults(1);
+			$result = $qb->executeQuery();
+			$row = $result->fetch();
+			$result->closeCursor();
+			return $row !== false;
+		} catch (\Throwable $e) {
+			return false;
+		}
+	}
+
+	/**
+	 * @return int[]
+	 */
+	private function getUserRoleIdsForBoard(int $boardId, string $userId): array
+	{
+		$cacheKey = $boardId . ':' . $userId;
+		if (isset($this->userRoleIdsCache[$cacheKey])) {
+			return $this->userRoleIdsCache[$cacheKey];
+		}
+
+		$memberships = $this->membershipMapper->findByBoard($boardId);
+		$out = [];
+		foreach ($memberships as $membership) {
+			if ($this->membershipMatchesUser($membership, $userId)) {
+				$out[] = (int) $membership->getRoleId();
+			}
+		}
+		$out = array_values(array_unique(array_filter($out, static fn (int $id) => $id > 0)));
+		$this->userRoleIdsCache[$cacheKey] = $out;
+		return $out;
+	}
+
+	/**
+	 * Union of default roles for move+approve.
+	 *
+	 * @return int[]
+	 */
+	private function getDefaultUnionRoleIds(int $boardId): array
+	{
+		if (isset($this->defaultUnionRoleIdsCache[$boardId])) {
+			return $this->defaultUnionRoleIdsCache[$boardId];
+		}
+		$move = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_MOVE);
+		$approve = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_APPROVE);
+		$roleIds = array_merge(
+			array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $move),
+			array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $approve),
+		);
+		$roleIds = array_values(array_unique(array_filter($roleIds, static fn (int $id) => $id > 0)));
+		$this->defaultUnionRoleIdsCache[$boardId] = $roleIds;
+		return $roleIds;
+	}
+
+	/**
+	 * @return int[]
+	 */
+	private function getDefaultRoleIdsForAction(int $boardId, string $action): array
+	{
+		$defaults = $this->defaultRoleMapper->findByBoardAndAction($boardId, $action);
+		$roleIds = array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $defaults);
+		return array_values(array_unique(array_filter($roleIds, static fn (int $id) => $id > 0)));
+	}
+
+	/**
+	 * @param int[] $cardIds
+	 * @return array<int, int[]> cardId => roleIds
+	 */
+	private function getExplicitRoleIdsForCardsAndActions(int $boardId, array $cardIds, array $actions): array
+	{
+		if ($cardIds === [] || $actions === []) {
+			return [];
+		}
+
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('cp.card_id', 'cpr.role_id')
+			->from('deck_card_policy', 'cp')
+			->innerJoin('cp', 'deck_card_policy_roles', 'cpr', $qb->expr()->eq('cp.id', 'cpr.policy_id'))
+			->where($qb->expr()->eq('cp.board_id', $qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->in('cp.card_id', $qb->createNamedParameter($cardIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->andWhere($qb->expr()->in('cpr.action', $qb->createNamedParameter(array_values($actions), IQueryBuilder::PARAM_STR_ARRAY)));
+
+		$result = $qb->executeQuery();
+		$out = [];
+		while ($row = $result->fetch()) {
+			$cardId = (int) ($row['card_id'] ?? 0);
+			$roleId = (int) ($row['role_id'] ?? 0);
+			if ($cardId <= 0 || $roleId <= 0) {
+				continue;
+			}
+			if (!isset($out[$cardId])) {
+				$out[$cardId] = [];
+			}
+			$out[$cardId][] = $roleId;
+		}
+		$result->closeCursor();
+
+		foreach ($out as $cid => $roleIds) {
+			$out[$cid] = array_values(array_unique(array_filter($roleIds, static fn (int $id) => $id > 0)));
+		}
+
+		return $out;
 	}
 
 	private function membershipMatchesUser(BoardPolicyRoleMembership $membership, string $userId): bool

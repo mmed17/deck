@@ -48,6 +48,7 @@ class SearchService {
 		IUserManager $userManager,
 		IL10N $l10n,
 		IURLGenerator $urlGenerator,
+		?CardPolicyService $cardPolicyService = null,
 	) {
 		$this->boardService = $boardService;
 		$this->cardMapper = $cardMapper;
@@ -57,7 +58,10 @@ class SearchService {
 		$this->userManager = $userManager;
 		$this->l10n = $l10n;
 		$this->urlGenerator = $urlGenerator;
+		$this->cardPolicyService = $cardPolicyService;
 	}
+
+	private ?CardPolicyService $cardPolicyService = null;
 
 	public function searchCards(string $term, ?int $limit = null, ?int $cursor = null): array {
 		$boards = $this->boardService->getUserBoards();
@@ -65,6 +69,27 @@ class SearchService {
 			return $board->getId();
 		}, $boards);
 		$matchedCards = $this->cardMapper->search($boardIds, $this->filterStringParser->parse($term), $limit, $cursor);
+
+		if ($this->cardPolicyService instanceof CardPolicyService) {
+			$visible = [];
+			foreach ($matchedCards as $card) {
+				if (!$card instanceof Card) {
+					continue;
+				}
+				$cardId = (int) $card->getId();
+				$boardId = (int) ($this->cardMapper->findBoardId($cardId) ?? 0);
+				if ($boardId <= 0) {
+					continue;
+				}
+				try {
+					$this->cardPolicyService->assertUserAllowedToViewCard($boardId, $cardId, null);
+					$visible[] = $card;
+				} catch (\Throwable $e) {
+					continue;
+				}
+			}
+			$matchedCards = $visible;
+		}
 
 		return $this->cardService->enrichCards($matchedCards);
 	}

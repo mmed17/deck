@@ -21,6 +21,7 @@ use OCP\AppFramework\Db\MultipleObjectsReturnedException;
 use OCP\Cache\CappedMemoryCache;
 use OCP\IConfig;
 use OCP\IGroupManager;
+use OCP\IDBConnection;
 use OCP\IUserManager;
 use OCP\Share\IManager;
 use Psr\Log\LoggerInterface;
@@ -41,6 +42,7 @@ class PermissionService {
 		private IManager $shareManager,
 		private IConfig $config,
 		private ?string $userId,
+		private ?IDBConnection $db = null,
 	) {
 		$this->boardCache = new CappedMemoryCache();
 		$this->permissionCache = new CappedMemoryCache();
@@ -70,8 +72,14 @@ class PermissionService {
 			$acls = [];
 		}
 
+		// Project/organization admins may read project-linked boards even if not in board ACL.
+		$projectAdminRead = false;
+		if (!$owner) {
+			$projectAdminRead = $this->userIsProjectOwnerOrOrganizationAdmin($boardId, (string) $userId);
+		}
+
 		$permissions = [
-			Acl::PERMISSION_READ => $owner || $this->userCan($acls, Acl::PERMISSION_READ, $userId),
+			Acl::PERMISSION_READ => $owner || $projectAdminRead || $this->userCan($acls, Acl::PERMISSION_READ, $userId),
 			Acl::PERMISSION_EDIT => $owner || $this->userCan($acls, Acl::PERMISSION_EDIT, $userId),
 			Acl::PERMISSION_MANAGE => $owner || $this->userCan($acls, Acl::PERMISSION_MANAGE, $userId),
 			Acl::PERMISSION_SHARE => ($owner || $this->userCan($acls, Acl::PERMISSION_SHARE, $userId))
@@ -79,6 +87,56 @@ class PermissionService {
 		];
 		$this->permissionCache->set($cacheKey, $permissions);
 		return $permissions;
+	}
+
+	private function userIsProjectOwnerOrOrganizationAdmin(int $boardId, string $userId): bool
+	{
+		$userId = trim($userId);
+		if ($userId === '' || $boardId <= 0 || !$this->db instanceof IDBConnection) {
+			return false;
+		}
+
+		if ($this->groupManager->isAdmin($userId)) {
+			return true;
+		}
+
+		try {
+			$qb = $this->db->getQueryBuilder();
+			$qb->select('owner_id', 'organization_id')
+				->from('custom_projects')
+				->where($qb->expr()->eq('board_id', $qb->createNamedParameter($boardId, \PDO::PARAM_INT)))
+				->setMaxResults(1);
+			$res = $qb->executeQuery();
+			$row = $res->fetch();
+			$res->closeCursor();
+			if ($row === false) {
+				return false;
+			}
+
+			$ownerId = trim((string) ($row['owner_id'] ?? ''));
+			if ($ownerId !== '' && $ownerId === $userId) {
+				return true;
+			}
+
+			$orgId = isset($row['organization_id']) && $row['organization_id'] !== null ? (int) $row['organization_id'] : 0;
+			if ($orgId <= 0) {
+				return false;
+			}
+
+			$qb = $this->db->getQueryBuilder();
+			$qb->select('user_uid')
+				->from('organization_members')
+				->where($qb->expr()->eq('organization_id', $qb->createNamedParameter($orgId, \PDO::PARAM_INT)))
+				->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userId, \PDO::PARAM_STR)))
+				->andWhere($qb->expr()->eq('role', $qb->createNamedParameter('admin', \PDO::PARAM_STR)))
+				->setMaxResults(1);
+			$res = $qb->executeQuery();
+			$ok = $res->fetch() !== false;
+			$res->closeCursor();
+			return $ok;
+		} catch (\Throwable $e) {
+			return false;
+		}
 	}
 
 	/**

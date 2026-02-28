@@ -26,7 +26,10 @@
 
 			<div v-if="board && board.permissions.PERMISSION_MANAGE" class="saas-section">
 				<div class="saas-section-header clickable" @click="toggleSection('permissions')">
-					<h3>{{ t('deck', 'Permissions') }}</h3>
+					<div class="section-title-group">
+						<h3>{{ t('deck', 'Advanced Permissions') }}</h3>
+						<p class="section-subtitle">{{ t('deck', 'Collapsed by default. Open to manage card-level access rules.') }}</p>
+					</div>
 					<ChevronDown class="section-icon" :class="{ 'is-collapsed': sectionState.permissions }" />
 				</div>
 				<div v-show="!sectionState.permissions" class="section-content">
@@ -220,7 +223,7 @@ export default {
             sectionState: {
                 timeline: false,
                 analytics: false,
-                permissions: false,
+                permissions: true,
                 tasks: false
             },
             // Assignment modal
@@ -458,6 +461,18 @@ $saas-primary: #0082c9;
         font-weight: 700;
         color: $saas-text;
         line-height: 1.2;
+    }
+
+    .section-title-group {
+        display: grid;
+        gap: 2px;
+    }
+
+    .section-subtitle {
+        margin: 0;
+        font-size: 12px;
+        color: #64748b;
+        font-weight: 500;
     }
 
     .section-icon {

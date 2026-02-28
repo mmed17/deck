@@ -58,4 +58,22 @@ export class CardPolicyApi {
 			return response.data?.ocs?.data || response.data
 		})
 	}
+
+	createRole(boardId, payload) {
+		return axios.post(this.url(`/boards/${boardId}/card-policy/roles`), payload).then((response) => {
+			return response.data?.ocs?.data || response.data
+		})
+	}
+
+	updateRole(boardId, roleId, payload) {
+		return axios.put(this.url(`/boards/${boardId}/card-policy/roles/${roleId}`), payload).then((response) => {
+			return response.data?.ocs?.data || response.data
+		})
+	}
+
+	deleteRole(boardId, roleId) {
+		return axios.delete(this.url(`/boards/${boardId}/card-policy/roles/${roleId}`)).then((response) => {
+			return response.data?.ocs?.data || response.data
+		})
+	}
 }
