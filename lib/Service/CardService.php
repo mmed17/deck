@@ -290,10 +290,13 @@ class CardService
 		}
 		$card = $this->cardMapper->find($id);
 		$beforeStackId = (int) $card->getStackId();
+		$toStackId = (int) $stackId;
 		$boardIdForPolicy = (int) ($this->cardMapper->findBoardId((int) $id) ?? 0);
 		$policyEnabled = $boardIdForPolicy > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardIdForPolicy);
 		$approvedStackId = $policyEnabled ? (int) ($this->cardPolicyService->getApprovedStackId($boardIdForPolicy) ?? 0) : 0;
 		$actorId = (string) ($this->userId ?? '');
+		$triggerDoneActivity = false;
+		$triggerUndoneActivity = false;
 		if ($archived !== null && $card->getArchived() && $archived === true) {
 			throw new StatusException('Operation not allowed. This card is archived.');
 		}
@@ -522,6 +525,8 @@ class CardService
 		if ($card->getArchived()) {
 			throw new StatusException('Operation not allowed. This card is archived.');
 		}
+
+		$changes = new ChangeSet($card);
 
 		$oldStackId = (int) $card->getStackId();
 		$boardId = (int) ($this->cardMapper->findBoardId((int) $id) ?? 0);
