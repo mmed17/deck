@@ -9,12 +9,12 @@
 
 		<div class="kpi-breakdown">
 			<div class="kpi-breakdown__col">
-				<span class="kpi-breakdown__value" :style="{ color: leftColor }">{{ formatValue(leftValue) }}</span>
+				<span class="kpi-breakdown__value" :style="{ color: leftColor }">{{ formatBreakdownValue(leftNumeric, leftDisplayTotal) }}</span>
 				<span class="kpi-breakdown__hint">{{ leftLabel }}</span>
 			</div>
 			<div class="kpi-breakdown__divider" />
 			<div class="kpi-breakdown__col">
-				<span class="kpi-breakdown__value" :style="{ color: rightColor }">{{ formatValue(rightValue) }}</span>
+				<span class="kpi-breakdown__value" :style="{ color: rightColor }">{{ formatBreakdownValue(rightNumeric, rightDisplayTotal) }}</span>
 				<span class="kpi-breakdown__hint">{{ rightLabel }}</span>
 			</div>
 		</div>
@@ -47,6 +47,10 @@ export default {
 			type: [Number, String],
 			required: true,
 		},
+		leftTotal: {
+			type: [Number, String],
+			default: null,
+		},
 		leftColor: {
 			type: String,
 			default: '#ef4444',
@@ -59,6 +63,10 @@ export default {
 			type: [Number, String],
 			required: true,
 		},
+		rightTotal: {
+			type: [Number, String],
+			default: null,
+		},
 		rightColor: {
 			type: String,
 			default: '#334155',
@@ -69,28 +77,42 @@ export default {
 		},
 	},
 	computed: {
-		totalNumeric() {
+		leftNumeric() {
 			const left = typeof this.leftValue === 'number' ? this.leftValue : Number(this.leftValue)
+			return Number.isFinite(left) ? left : 0
+		},
+		rightNumeric() {
 			const right = typeof this.rightValue === 'number' ? this.rightValue : Number(this.rightValue)
-			const safeLeft = Number.isFinite(left) ? left : 0
-			const safeRight = Number.isFinite(right) ? right : 0
-			return safeLeft + safeRight
+			return Number.isFinite(right) ? right : 0
+		},
+		totalNumeric() {
+			return this.leftNumeric + this.rightNumeric
+		},
+		leftDisplayTotal() {
+			const leftTotal = typeof this.leftTotal === 'number' ? this.leftTotal : Number(this.leftTotal)
+			const safeLeftTotal = Number.isFinite(leftTotal) ? leftTotal : this.totalNumeric
+			return Math.max(safeLeftTotal, 0)
+		},
+		rightDisplayTotal() {
+			const rightTotal = typeof this.rightTotal === 'number' ? this.rightTotal : Number(this.rightTotal)
+			const safeRightTotal = Number.isFinite(rightTotal) ? rightTotal : this.totalNumeric
+			return Math.max(safeRightTotal, 0)
 		},
 		showBar() {
 			return this.totalNumeric > 0
 		},
 		leftPercent() {
-			const left = typeof this.leftValue === 'number' ? this.leftValue : Number(this.leftValue)
-			const safeLeft = Number.isFinite(left) ? left : 0
-			return this.totalNumeric > 0 ? Math.round((safeLeft / this.totalNumeric) * 100) : 0
+			return this.totalNumeric > 0 ? Math.round((this.leftNumeric / this.totalNumeric) * 100) : 0
 		},
 		rightPercent() {
 			return 100 - this.leftPercent
 		},
 	},
 	methods: {
-		formatValue(value) {
-			return typeof value === 'number' ? value.toLocaleString() : value
+		formatBreakdownValue(value, total) {
+			const safeValue = Number.isFinite(value) ? value : 0
+			const safeTotal = Number.isFinite(total) ? Math.max(total, 0) : 0
+			return `${safeValue.toLocaleString()}/${safeTotal.toLocaleString()}`
 		},
 	},
 }

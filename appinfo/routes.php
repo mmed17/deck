@@ -88,6 +88,12 @@ return [
 		['name' => 'card_policy#updateRole', 'url' => '/boards/{boardId}/card-policy/roles/{roleId}', 'verb' => 'PUT'],
 		['name' => 'card_policy#deleteRole', 'url' => '/boards/{boardId}/card-policy/roles/{roleId}', 'verb' => 'DELETE'],
 
+		// card policy permission templates
+		['name' => 'card_permission_template#list', 'url' => '/card-policy/templates', 'verb' => 'GET'],
+		['name' => 'card_permission_template#createFromBoard', 'url' => '/card-policy/templates/from-board', 'verb' => 'POST'],
+		['name' => 'card_permission_template#get', 'url' => '/card-policy/templates/{templateId}', 'verb' => 'GET'],
+		['name' => 'card_permission_template#delete', 'url' => '/card-policy/templates/{templateId}', 'verb' => 'DELETE'],
+
 		// notes api
 		['name' => 'note_api#index', 'url' => '/api/v{apiVersion}/cards/{cardId}/notes', 'verb' => 'GET'],
 		['name' => 'note_api#create', 'url' => '/api/v{apiVersion}/cards/{cardId}/notes', 'verb' => 'POST'],

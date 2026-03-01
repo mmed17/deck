@@ -1,39 +1,49 @@
 <template>
 	<div class="pc-policy-app">
 		<div v-if="loading && !cards.length" class="pc-loading-state">
+			<div class="pc-spinner" aria-hidden="true" />
 			<p>{{ t('deck', 'Loading permissions data...') }}</p>
 		</div>
 
 		<div v-else-if="error" class="pc-error-state">
+			<div class="pc-error-icon">⚠️</div>
 			<h3>{{ t('deck', 'Failed to load permissions') }}</h3>
 			<p>{{ error }}</p>
 			<NcButton @click="load">{{ t('deck', 'Retry') }}</NcButton>
 		</div>
 
 		<div v-else-if="settings.permissionMode !== 'card_policy'" class="pc-enable-state">
+			<div class="pc-enable-icon">🛡️</div>
 			<h3>{{ t('deck', 'Granular Permissions Disabled') }}</h3>
 			<p class="muted">{{ t('deck', 'This board is using legacy permissions. Upgrade to the new card-policy system to enable granular access controls.') }}</p>
-			<NcButton type="primary" @click="enableMode">{{ t('deck', 'Enable Granular Permissions') }}</NcButton>
+			<NcButton type="primary" size="large" @click="enableMode">{{ t('deck', 'Enable Granular Permissions') }}</NcButton>
 		</div>
 
 		<div v-else class="pc-policy-container">
 			<div class="pc-app-header">
 				<div class="pc-header-titles">
 					<h2>{{ t('deck', 'Card Permissions') }}</h2>
-					<p class="muted">{{ t('deck', 'Assign view, move and approve permissions to specific cards.') }}</p>
+					<p class="muted">{{ t('deck', 'Assign move and approve permissions to specific cards.') }}</p>
 				</div>
 				<div class="pc-header-actions">
 					<NcButton type="tertiary" @click="showMembersModal = true">
+						<template #icon><span class="pc-emoji-icon">👥</span></template>
 						{{ t('deck', 'Board Roles & Members') }}
 					</NcButton>
 					<NcButton type="tertiary" @click="showDefaultsModal = true">
+						<template #icon><span class="pc-emoji-icon">⚙️</span></template>
 						{{ t('deck', 'Board Defaults') }}
+					</NcButton>
+					<NcButton type="tertiary" @click="openTemplates">
+						<template #icon><span class="pc-emoji-icon">📋</span></template>
+						{{ t('deck', 'Templates') }}
 					</NcButton>
 				</div>
 			</div>
 
 			<div class="pc-toolbar">
 				<div class="pc-toolbar-search">
+					<span class="pc-search-icon">🔍</span>
 					<input v-model.trim="cardSearch" type="search" :placeholder="t('deck', 'Search cards...')" class="pc-search-input">
 				</div>
 				<div class="pc-toolbar-filters">
@@ -57,7 +67,6 @@
 							</th>
 							<th class="pc-col-name">{{ t('deck', 'Card Name') }}</th>
 							<th class="pc-col-stack">{{ t('deck', 'Stack') }}</th>
-							<th class="pc-col-perms">{{ t('deck', 'Who can View') }}</th>
 							<th class="pc-col-perms">{{ t('deck', 'Who can Move') }}</th>
 							<th class="pc-col-perms">{{ t('deck', 'Who can Approve') }}</th>
 							<th class="pc-col-actions"></th>
@@ -65,12 +74,12 @@
 					</thead>
 					<tbody>
 						<tr v-if="filteredCards.length === 0">
-							<td colspan="7" class="pc-empty-row">{{ t('deck', 'No cards match your filters.') }}</td>
+							<td colspan="6" class="pc-empty-row">{{ t('deck', 'No cards match your filters.') }}</td>
 						</tr>
 						<tr
 							v-for="card in filteredCards"
 							:key="card.id"
-							:class="{ 'is-selected': isSelected(card.id) }"
+							:class="{ 'is-selected': isSelected(card.id), 'is-custom': card.hasExplicitPolicy }"
 							@click="toggleSelection(card.id, $event)">
 							<td class="pc-col-check" @click.stop>
 								<input v-model="selectedCardIds" type="checkbox" :value="card.id">
@@ -78,7 +87,7 @@
 							<td class="pc-col-name">
 								<div class="pc-card-title-wrap">
 									<span class="pc-card-title">{{ card.title }}</span>
-									<span v-if="card.hasExplicitPolicy" class="pc-badge-custom" :title="t('deck', 'This card has specific override rules')">{{ t('deck', 'Custom') }}</span>
+									<span v-if="card.hasExplicitPolicy" class="pc-badge pc-badge-custom" :title="t('deck', 'This card has specific override rules')">{{ t('deck', 'Custom') }}</span>
 								</div>
 							</td>
 							<td class="pc-col-stack">
@@ -86,20 +95,11 @@
 							</td>
 							<td class="pc-col-perms">
 								<div class="pc-role-chips">
-									<span v-for="rk in getEffectivePerms(card, 'view')" :key="`${card.id}-v-${rk}`" class="pc-role-chip" :style="chipStyleByKey(rk)">
-										<span class="pc-dot" :style="{ background: roleColorByKey(rk) }" />
-										{{ roleNameByKey(rk) }}
-									</span>
-									<span v-if="!getEffectivePerms(card, 'view').length" class="muted-dash">-</span>
-								</div>
-							</td>
-							<td class="pc-col-perms">
-								<div class="pc-role-chips">
 									<span v-for="rk in getEffectivePerms(card, 'move')" :key="`${card.id}-m-${rk}`" class="pc-role-chip" :style="chipStyleByKey(rk)">
 										<span class="pc-dot" :style="{ background: roleColorByKey(rk) }" />
 										{{ roleNameByKey(rk) }}
 									</span>
-									<span v-if="!getEffectivePerms(card, 'move').length" class="muted-dash">-</span>
+									<span v-if="!getEffectivePerms(card, 'move').length" class="muted-dash">—</span>
 								</div>
 							</td>
 							<td class="pc-col-perms">
@@ -108,12 +108,18 @@
 										<span class="pc-dot" :style="{ background: roleColorByKey(rk) }" />
 										{{ roleNameByKey(rk) }}
 									</span>
-									<span v-if="!getEffectivePerms(card, 'approve').length" class="muted-dash">-</span>
+									<span v-if="!getEffectivePerms(card, 'approve').length" class="muted-dash">—</span>
 								</div>
 							</td>
 							<td class="pc-col-actions" @click.stop>
-								<NcButton v-if="card.hasExplicitPolicy" type="tertiary" size="small" @click="resetCard(card)">
-									{{ t('deck', 'Reset') }}
+								<NcButton
+									v-if="card.hasExplicitPolicy"
+									type="tertiary"
+									size="small"
+									:aria-label="t('deck', 'Reset to board defaults')"
+									:title="t('deck', 'Reset to board defaults')"
+									@click="resetCard(card)">
+									<template #icon>↺</template>
 								</NcButton>
 							</td>
 						</tr>
@@ -130,10 +136,6 @@
 
 					<div class="pc-fab-controls">
 						<div class="pc-fab-field">
-							<label>{{ t('deck', 'View:') }}</label>
-							<NcSelect v-model="bulkEdits.view" :options="roleOptions" label="label" track-by="value" :multiple="true" :close-on-select="false" :placeholder="t('deck', 'Select roles...')" />
-						</div>
-						<div class="pc-fab-field">
 							<label>{{ t('deck', 'Move:') }}</label>
 							<NcSelect v-model="bulkEdits.move" :options="roleOptions" label="label" track-by="value" :multiple="true" :close-on-select="false" :placeholder="t('deck', 'Select roles...')" />
 						</div>
@@ -145,7 +147,7 @@
 
 					<div class="pc-fab-actions">
 						<NcButton type="primary" :loading="savingBulk" @click="saveBulk">{{ t('deck', 'Apply Rules') }}</NcButton>
-						<NcButton type="tertiary" :loading="savingBulk" @click="resetBulk">{{ t('deck', 'Reset to Defaults') }}</NcButton>
+						<NcButton type="tertiary" :loading="savingBulk" :title="t('deck', 'Remove custom rules from selected cards')" @click="resetBulk">{{ t('deck', 'Reset to Defaults') }}</NcButton>
 					</div>
 				</div>
 			</transition>
@@ -155,15 +157,6 @@
 			<div class="pc-modal-content">
 				<div class="pc-modal-header-desc">
 					<p>{{ t('deck', 'These permissions apply automatically to any card that does not have custom overrides set.') }}</p>
-				</div>
-				<div class="pc-modal-field">
-					<label>{{ t('deck', 'Approved/Done stack') }}</label>
-					<NcSelect v-model="approvedStackSelection" :options="stackOptions" label="title" track-by="id" :clearable="false" />
-				</div>
-				<div class="pc-modal-field">
-					<label>{{ t('deck', 'Who can view cards') }}</label>
-					<NcSelect v-model="defaults.view" :options="roleOptions" label="label" track-by="value" :multiple="true" :close-on-select="false" />
-					<p class="muted">{{ t('deck', 'If left empty, visibility is derived from Move/Approve rules.') }}</p>
 				</div>
 				<div class="pc-modal-field">
 					<label>{{ t('deck', 'Who can move cards') }}</label>
@@ -180,68 +173,165 @@
 			</div>
 		</NcModal>
 
-		<NcModal v-if="showMembersModal" :title="t('deck', 'Board Roles & Members')" @close="showMembersModal = false">
+		<NcModal v-if="showMembersModal" :title="t('deck', 'Board Roles & Members')" size="large" @close="showMembersModal = false">
 			<div class="pc-modal-content pc-members-modal">
-				<div class="pc-add-role-box">
-					<h4>{{ t('deck', 'Create Role') }}</h4>
-					<div class="pc-add-role-row">
-						<NcTextField
-							class="pc-flex-1"
-							v-model="newRole.name"
-							:label="t('deck', 'Role name')"
-							:show-label="true"
-							:placeholder="t('deck', 'e.g., Installer')" />
-						<NcTextField
-							class="pc-flex-1"
-							v-model="newRole.roleKey"
-							:label="t('deck', 'Role key')"
-							:show-label="true"
-							:placeholder="t('deck', 'e.g., installer')"
-							@focus="newRoleKeyTouched = true"
-							@input="newRoleKeyTouched = true" />
-						<div class="pc-role-color-field">
-							<label class="pc-role-color-label">{{ t('deck', 'Color') }}</label>
-							<NcColorPicker v-model="newRole.color" class="pc-role-color-picker">
-								<div class="pc-role-color-swatch" :style="{ backgroundColor: newRole.color }" />
-							</NcColorPicker>
+				<div class="pc-modal-tabs" role="tablist" :aria-label="t('deck', 'Role management')">
+					<button type="button" class="pc-modal-tab" :class="{ 'pc-modal-tab--active': membersModalTab === 'members' }" @click="membersModalTab = 'members'">{{ t('deck', 'Members') }}</button>
+					<button type="button" class="pc-modal-tab" :class="{ 'pc-modal-tab--active': membersModalTab === 'roles' }" @click="membersModalTab = 'roles'">{{ t('deck', 'Roles') }}</button>
+				</div>
+
+				<div v-if="membersModalTab === 'roles'">
+					<div class="pc-add-role-box">
+						<h4>{{ t('deck', 'Create Role') }}</h4>
+						<div class="pc-add-role-row">
+							<NcTextField
+								class="pc-flex-1"
+								v-model="newRole.name"
+								:label="t('deck', 'Role name')"
+								:show-label="true"
+								:placeholder="t('deck', 'e.g., Installer')" />
+							<NcTextField
+								class="pc-flex-1"
+								v-model="newRole.roleKey"
+								:label="t('deck', 'Role key')"
+								:show-label="true"
+								:placeholder="t('deck', 'e.g., installer')"
+								@focus="newRoleKeyTouched = true"
+								@input="newRoleKeyTouched = true" />
+							<div class="pc-role-color-field">
+								<label class="pc-role-color-label">{{ t('deck', 'Color') }}</label>
+								<NcColorPicker v-model="newRole.color" class="pc-role-color-picker">
+									<div class="pc-role-color-swatch" :style="{ backgroundColor: newRole.color }" />
+								</NcColorPicker>
+							</div>
+							<NcButton type="primary" :loading="creatingRole" :disabled="!newRole.name.trim() || !newRole.roleKey.trim()" @click="createRole">
+								{{ t('deck', 'Create') }}
+							</NcButton>
 						</div>
-						<NcButton type="primary" :loading="creatingRole" :disabled="!newRole.name.trim() || !newRole.roleKey.trim()" @click="createRole">
-							{{ t('deck', 'Create') }}
+						<p class="pc-help-muted">
+							{{ t('deck', 'Role keys must be lowercase and can contain letters, numbers, underscores and dashes.') }}
+						</p>
+					</div>
+
+					<div class="pc-roles-list-box">
+						<h4>{{ t('deck', 'Existing Roles') }}</h4>
+						<div v-if="roles.length === 0" class="muted" style="padding: 20px; text-align: center;">{{ t('deck', 'No roles available.') }}</div>
+						<div v-else class="pc-roles-chips">
+							<span v-for="r in roles" :key="r.id" class="pc-role-chip" :style="{ borderColor: r.color }">
+								<span class="pc-dot" :style="{ background: r.color }" />
+								{{ r.name }} <span class="pc-role-key">({{ r.roleKey }})</span>
+							</span>
+						</div>
+					</div>
+				</div>
+
+				<div v-else>
+					<div class="pc-add-member-box">
+						<h4>{{ t('deck', 'Add Member to Role') }}</h4>
+						<div class="pc-add-member-row">
+							<NcSelect class="pc-flex-1" v-model="newMembership.user" :options="userOptions" :placeholder="t('deck', 'Select a user...')" label="label" track-by="value" />
+							<NcSelect class="pc-flex-1" v-model="newMembership.role" :options="roleOptions" :placeholder="t('deck', 'Select a role...')" label="label" track-by="value" />
+							<NcButton type="primary" :disabled="!canAddMembership" @click="addMembership">{{ t('deck', 'Add') }}</NcButton>
+						</div>
+					</div>
+
+					<div class="pc-members-list-box">
+						<h4>{{ t('deck', 'Current Members') }}</h4>
+						<div v-if="memberships.length === 0" class="muted pc-members-empty">{{ t('deck', 'No roles assigned.') }}</div>
+						<table v-else class="pc-simple-table">
+							<tbody>
+								<tr v-for="m in memberships" :key="m.id">
+									<td class="pc-simple-td-name"><strong>{{ getMemberDisplayName(m.participant) }}</strong></td>
+									<td class="pc-simple-td-role">
+										<span class="pc-role-chip" :style="chipStyleByRoleId(m.roleId)">
+											<span class="pc-dot" :style="{ background: roleColorById(m.roleId) }" />
+											{{ roleNameById[m.roleId] || m.roleId }}
+										</span>
+									</td>
+									<td class="pc-simple-td-action">
+										<button class="pc-danger-btn" @click="deleteMembership(m)">{{ t('deck', 'Remove') }}</button>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</NcModal>
+
+		<!-- MODAL: TEMPLATES -->
+		<NcModal v-if="showTemplatesModal" @close="showTemplatesModal = false" :title="t('deck', 'Permission Templates')" size="large">
+			<div class="pc-modal-content pc-templates-modal">
+				<div class="pc-modal-header-desc">
+					<p class="muted">{{ t('deck', 'Apply an existing template to this board, or save the current setup as a new template.') }}</p>
+				</div>
+
+				<div class="pc-template-list-box">
+					<div class="pc-box-header">
+						<h4 style="margin: 0;">{{ t('deck', 'Available Templates') }}</h4>
+					</div>
+
+					<div v-if="templatesLoading" class="pc-state-message muted">
+						<div class="pc-spinner" aria-hidden="true" /> {{ t('deck', 'Loading templates...') }}
+					</div>
+					<div v-else-if="templatesError" class="pc-state-message error">
+						{{ templatesError }}
+					</div>
+					<div v-else>
+						<div v-if="templates.length === 0" class="pc-empty-state muted">
+							<span style="font-size: 24px; display: block; margin-bottom: 8px;">📋</span>
+							{{ t('deck', 'No templates saved yet. Save the current board setup below.') }}
+						</div>
+						<div v-else class="pc-template-cards">
+							<div v-for="tpl in templates" :key="tpl.id" class="pc-template-card">
+								<div class="pc-template-card-info">
+									<strong class="pc-template-name">{{ tpl.name }}</strong>
+									<span class="pc-template-meta muted">{{ t('deck', 'By {user} · {date}', { user: tpl.createdBy, date: formatIso(tpl.createdAt) }) }}</span>
+								</div>
+								<div class="pc-template-card-actions">
+									<NcButton
+										type="primary"
+										size="small"
+										:loading="applyingTemplateId === tpl.id"
+										:disabled="(!!applyingTemplateId && applyingTemplateId !== tpl.id) || tpl.canApply === false"
+										:title="tpl.canApply === false ? t('deck', 'Only project owners can apply templates') : ''"
+										@click="applyTemplate(tpl)">
+										<template #icon>✨</template>
+										{{ t('deck', 'Apply Template') }}
+									</NcButton>
+									<NcButton
+										type="tertiary"
+										size="small"
+										:disabled="tpl.canDelete === false"
+										:title="tpl.canDelete === false ? t('deck', 'You can only delete templates you created') : t('deck', 'Delete template')"
+										aria-label="Delete template"
+										@click="deleteTemplate(tpl)">
+										<template #icon>
+											<span style="color: var(--color-error); font-size: 16px;">🗑️</span>
+										</template>
+									</NcButton>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<hr class="pc-modal-divider">
+
+				<div class="pc-template-create-box">
+					<h4 style="margin: 0 0 12px;">{{ t('deck', 'Save Current Board as Template') }}</h4>
+					<p class="muted" style="margin: 0 0 12px; font-size: 13px;">{{ t('deck', 'This will capture the current stacks, cards, roles, and permission settings.') }}</p>
+					<div class="pc-template-create-row">
+						<NcTextField class="pc-flex-1" v-model="templateName" :label="t('deck', 'Template name')" :show-label="false" :placeholder="t('deck', 'e.g., Standard Flow v2')" />
+						<NcButton type="secondary" :loading="savingTemplate" :disabled="!templateName.trim()" @click="saveTemplate">
+							<template #icon>💾</template>
+							{{ t('deck', 'Save as Template') }}
 						</NcButton>
 					</div>
-					<p class="pc-help-muted">
-						{{ t('deck', 'Role keys must be lowercase and can contain letters, numbers, underscores and dashes.') }}
-					</p>
 				</div>
 
-				<div class="pc-add-member-box">
-					<h4>{{ t('deck', 'Add Member to Role') }}</h4>
-					<div class="pc-add-member-row">
-						<NcSelect class="pc-flex-1" v-model="newMembership.user" :options="userOptions" :placeholder="t('deck', 'Select a user...')" label="label" track-by="value" />
-						<NcSelect class="pc-flex-1" v-model="newMembership.role" :options="roleOptions" :placeholder="t('deck', 'Select a role...')" label="label" track-by="value" />
-						<NcButton type="primary" :disabled="!canAddMembership" @click="addMembership">{{ t('deck', 'Add') }}</NcButton>
-					</div>
-				</div>
-
-				<div class="pc-members-list-box">
-					<h4>{{ t('deck', 'Current Members') }}</h4>
-					<div v-if="memberships.length === 0" class="muted pc-members-empty">{{ t('deck', 'No roles assigned.') }}</div>
-					<table v-else class="pc-simple-table">
-						<tbody>
-							<tr v-for="m in memberships" :key="m.id">
-								<td class="pc-simple-td-name"><strong>{{ getMemberDisplayName(m.participant) }}</strong></td>
-								<td class="pc-simple-td-role">
-									<span class="pc-role-chip" :style="chipStyleByRoleId(m.roleId)">
-										<span class="pc-dot" :style="{ background: roleColorById(m.roleId) }" />
-										{{ roleNameById[m.roleId] || m.roleId }}
-									</span>
-								</td>
-								<td class="pc-simple-td-action">
-									<button class="pc-danger-btn" @click="deleteMembership(m)">{{ t('deck', 'Remove') }}</button>
-								</td>
-							</tr>
-						</tbody>
-					</table>
+				<div class="pc-modal-footer">
+					<NcButton @click="showTemplatesModal = false">{{ t('deck', 'Close') }}</NcButton>
 				</div>
 			</div>
 		</NcModal>
@@ -252,6 +342,9 @@
 import { NcButton, NcColorPicker, NcModal, NcSelect, NcTextField } from '@nextcloud/vue'
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { CardPolicyApi } from '../../services/CardPolicyApi.js'
+import { StackApi } from '../../services/StackApi.js'
+import { CardApi } from '../../services/CardApi.js'
+import { CardPermissionTemplatesApi } from '../../services/CardPermissionTemplatesApi.js'
 
 export default {
 	name: 'CardPolicyManager',
@@ -264,21 +357,34 @@ export default {
 			loading: false,
 			error: '',
 			api: new CardPolicyApi(),
+			stackApi: new StackApi(),
+			cardApi: new CardApi(),
+			templatesApi: new CardPermissionTemplatesApi(),
 			settings: { permissionMode: 'legacy', approvedStackId: null },
 			roles: [],
 			memberships: [],
-			defaults: { view: [], move: [], approve: [] },
-			defaultRoleKeys: { view: [], move: [], approve: [] },
+			defaults: { move: [], approve: [] },
+			defaultRoleKeys: { move: [], approve: [] },
 			cards: [],
-			approvedStackSelection: null,
 			cardSearch: '',
 			stackFilter: 0,
 			showOnlyCustom: false,
 			selectedCardIds: [],
 			showDefaultsModal: false,
 			showMembersModal: false,
+			showTemplatesModal: false,
+			membersModalTab: 'members',
+
+			// Templates
+			templates: [],
+			templatesLoading: false,
+			templatesError: '',
+			templateName: '',
+			savingTemplate: false,
+			applyingTemplateId: null,
+
 			newMembership: { role: null, user: null },
-			bulkEdits: { view: [], move: [], approve: [] },
+			bulkEdits: { move: [], approve: [] },
 			savingDefaults: false,
 			savingBulk: false,
 			newRole: { name: '', roleKey: '', color: '#111111' },
@@ -346,14 +452,12 @@ export default {
 				const card = this.cards.find(c => c.id === newIds[0])
 				if (!card) return
 				const perms = card.effectivePolicy || {}
-				const viewKeys = perms.view || []
 				const moveKeys = perms.move || []
 				const approveKeys = perms.approve || []
-				this.bulkEdits.view = viewKeys.map(v => ({ value: v, label: this.roleOptions.find(o => o.value === v)?.label || v }))
 				this.bulkEdits.move = moveKeys.map(v => ({ value: v, label: this.roleOptions.find(o => o.value === v)?.label || v }))
 				this.bulkEdits.approve = approveKeys.map(v => ({ value: v, label: this.roleOptions.find(o => o.value === v)?.label || v }))
 			} else if (newIds.length === 0) {
-				this.bulkEdits = { view: [], move: [], approve: [] }
+				this.bulkEdits = { move: [], approve: [] }
 			}
 		},
 		'newRole.name'(val) {
@@ -362,6 +466,20 @@ export default {
 		},
 	},
 	methods: {
+		normStr(input) {
+			return String(input || '')
+				.trim()
+				.toLowerCase()
+				.replace(/\s+/g, ' ')
+		},
+		formatIso(iso) {
+			if (!iso) return ''
+			try {
+				return new Date(iso).toLocaleString()
+			} catch (e) {
+				return String(iso)
+			}
+		},
 		slugifyRoleKey(input) {
 			const raw = String(input || '').trim().toLowerCase()
 			return raw
@@ -385,15 +503,14 @@ export default {
 				this.settings = data.settings || { permissionMode: 'legacy', approvedStackId: null }
 				this.roles = data.roles || []
 				this.memberships = data.memberships || []
-				this.defaultRoleKeys = data.defaultRoleKeys || { view: [], move: [], approve: [] }
+				const d = data.defaultRoleKeys || { move: [], approve: [] }
+				this.defaultRoleKeys = { move: d.move || [], approve: d.approve || [] }
 				this.defaults = {
-					view: (this.defaultRoleKeys.view || []).map(v => ({ value: v, label: this.roleOptions.find(o => o.value === v)?.label || v })),
 					move: (this.defaultRoleKeys.move || []).map(v => ({ value: v, label: this.roleOptions.find(o => o.value === v)?.label || v })),
 					approve: (this.defaultRoleKeys.approve || []).map(v => ({ value: v, label: this.roleOptions.find(o => o.value === v)?.label || v })),
 				}
 				this.cards = data.cards || []
 				this.selectedCardIds = this.selectedCardIds.filter(id => this.cards.some(c => c.id === id))
-				this.approvedStackSelection = this.stackOptions.find(s => Number(s.id) === Number(this.settings.approvedStackId)) || this.stackOptions[0] || null
 				if (this.stackFilter && !this.stackOptions.find(s => Number(s.id) === Number(this.stackFilter))) {
 					this.stackFilter = 0
 				}
@@ -401,6 +518,237 @@ export default {
 				this.error = e?.response?.data?.ocs?.data?.message || e?.response?.data?.message || e?.message || 'Error'
 			} finally {
 				this.loading = false
+			}
+		},
+		async openTemplates() {
+			this.showTemplatesModal = true
+			await this.loadTemplates()
+		},
+		async loadTemplates() {
+			this.templatesLoading = true
+			this.templatesError = ''
+			try {
+				const list = await this.templatesApi.list(this.boardId)
+				this.templates = Array.isArray(list) ? list : []
+			} catch (e) {
+				this.templatesError = e?.response?.data?.ocs?.data?.message || e?.response?.data?.message || e?.message || this.t('deck', 'Failed to load templates')
+			} finally {
+				this.templatesLoading = false
+			}
+		},
+		async saveTemplate() {
+			this.savingTemplate = true
+			try {
+				await this.templatesApi.createFromBoard(this.boardId, this.templateName.trim())
+				showSuccess(this.t('deck', 'Template saved'))
+				this.templateName = ''
+				await this.loadTemplates()
+			} catch (e) {
+				showError(e?.response?.data?.ocs?.data?.message || e?.response?.data?.message || e?.message || this.t('deck', 'Failed to save template'))
+			} finally {
+				this.savingTemplate = false
+			}
+		},
+		async deleteTemplate(tpl) {
+			if (!tpl?.id) return
+			try {
+				await this.templatesApi.delete(tpl.id, this.boardId)
+				showSuccess(this.t('deck', 'Template deleted'))
+				await this.loadTemplates()
+			} catch (e) {
+				showError(e?.response?.data?.ocs?.data?.message || e?.response?.data?.message || e?.message || this.t('deck', 'Failed to delete template'))
+			}
+		},
+		async applyTemplate(tpl) {
+			if (!tpl?.id) return
+			if (tpl?.canApply === false) {
+				showError(this.t('deck', 'Only project owners can apply templates'))
+				return
+			}
+			if (this.applyingTemplateId) return
+			if (!confirm(`Apply template "${tpl.name}" to this board? This can create missing roles, stacks, and cards.`)) return
+			this.applyingTemplateId = tpl.id
+			try {
+				const fetched = await this.templatesApi.get(tpl.id, this.boardId)
+				const payload = fetched?.payload
+				if (!payload || typeof payload !== 'object') {
+					throw new Error('Invalid template payload')
+				}
+
+				let state = await this.api.getBoardPolicy(this.boardId)
+				const mode = String(state?.settings?.permissionMode || '')
+				if (mode !== 'card_policy') {
+					await this.api.enable(this.boardId)
+					state = await this.api.getBoardPolicy(this.boardId)
+				}
+
+				const report = {
+					createdRoles: 0,
+					createdStacks: 0,
+					createdCards: 0,
+					appliedCardPolicies: 0,
+					clearedCardPolicies: 0,
+					skippedCardPolicies: 0,
+					skippedCards: 0,
+					ambiguousCards: 0,
+					missingRoleKeys: new Set(),
+				}
+
+				// Roles
+				const existingRoleKeys = new Set((state?.roles || []).map(r => String(r.roleKey || '')))
+				for (const r of (payload.roles || [])) {
+					const roleKey = String(r?.roleKey || '').trim()
+					if (!roleKey) continue
+					if (existingRoleKeys.has(roleKey)) continue
+					await this.api.createRole(this.boardId, {
+						roleKey,
+						name: String(r?.name || roleKey),
+						color: String(r?.color || '#111111'),
+					})
+					report.createdRoles++
+					existingRoleKeys.add(roleKey)
+				}
+
+				state = await this.api.getBoardPolicy(this.boardId)
+				const finalRoleKeys = new Set((state?.roles || []).map(r => String(r.roleKey || '')))
+
+				// Defaults
+				const defaults = payload.defaults || {}
+				const move = (defaults.move || []).map(String).filter(k => finalRoleKeys.has(k))
+				const approve = (defaults.approve || []).map(String).filter(k => finalRoleKeys.has(k))
+				const view = (defaults.view || []).map(String).filter(k => finalRoleKeys.has(k))
+				await this.api.updateDefaults(this.boardId, { move, approve, view })
+
+				// Stacks
+				let stacks = await this.stackApi.loadStacks(this.boardId)
+				const stackIdByTitle = new Map((stacks || []).map(s => [this.normStr(s.title), Number(s.id)]))
+				for (const s of (payload.stacks || [])) {
+					const title = String(s?.title || '').trim()
+					if (!title) continue
+					const key = this.normStr(title)
+					if (stackIdByTitle.has(key)) continue
+					const created = await this.stackApi.createStack({
+						boardId: this.boardId,
+						title,
+						order: Number(s?.order ?? 999),
+					})
+					const createdId = Number(created?.id)
+					if (createdId > 0) {
+						report.createdStacks++
+						stackIdByTitle.set(key, createdId)
+					}
+				}
+
+				stacks = await this.stackApi.loadStacks(this.boardId)
+				const refreshedStackIdByTitle = new Map((stacks || []).map(s => [this.normStr(s.title), Number(s.id)]))
+
+				// Cards (from policy state)
+				state = await this.api.getBoardPolicy(this.boardId)
+				let boardCards = (state?.cards || []).map(c => ({
+					id: Number(c.id),
+					title: String(c.title || ''),
+					stackId: Number(c.stackId || 0),
+				}))
+
+				const findCardsByTitle = (title) => {
+					const k = this.normStr(title)
+					return boardCards.filter(c => this.normStr(c.title) === k)
+				}
+				const findCardInStack = (title, stackId) => {
+					const k = this.normStr(title)
+					return boardCards.find(c => c.stackId === Number(stackId) && this.normStr(c.title) === k) || null
+				}
+
+				for (const c of (payload.cards || [])) {
+					const title = String(c?.title || '').trim()
+					const stackTitle = String(c?.stackTitle || '').trim()
+					if (!title || !stackTitle) {
+						report.skippedCards++
+						continue
+					}
+					const desiredStackId = refreshedStackIdByTitle.get(this.normStr(stackTitle))
+					let targetCard = desiredStackId ? findCardInStack(title, desiredStackId) : null
+					if (!targetCard) {
+						const matches = findCardsByTitle(title)
+						if (matches.length === 1) {
+							targetCard = matches[0]
+						} else if (matches.length > 1) {
+							report.ambiguousCards++
+							if (desiredStackId) {
+								const created = await this.cardApi.addCard({
+									stackId: desiredStackId,
+									title,
+									order: Number(c?.order ?? 999),
+									description: String(c?.description || ''),
+								})
+								const createdId = Number(created?.id)
+								if (createdId > 0) {
+									report.createdCards++
+									targetCard = { id: createdId, title, stackId: desiredStackId }
+									boardCards.push(targetCard)
+								}
+							}
+						} else {
+							if (desiredStackId) {
+								const created = await this.cardApi.addCard({
+									stackId: desiredStackId,
+									title,
+									order: Number(c?.order ?? 999),
+									description: String(c?.description || ''),
+								})
+								const createdId = Number(created?.id)
+								if (createdId > 0) {
+									report.createdCards++
+									targetCard = { id: createdId, title, stackId: desiredStackId }
+									boardCards.push(targetCard)
+								}
+							}
+						}
+					}
+
+					if (!targetCard?.id) {
+						report.skippedCards++
+						continue
+					}
+
+					const policy = c?.policy || {}
+					const moveKeys = (policy.move || []).map(String)
+					const approveKeys = (policy.approve || []).map(String)
+					const viewKeys = (policy.view || []).map(String)
+					const hadAnyKeys = moveKeys.length > 0 || approveKeys.length > 0 || viewKeys.length > 0
+					const filteredMove = moveKeys.filter(k => finalRoleKeys.has(k))
+					const filteredApprove = approveKeys.filter(k => finalRoleKeys.has(k))
+					const filteredView = viewKeys.filter(k => finalRoleKeys.has(k))
+
+					for (const k of [...moveKeys, ...approveKeys, ...viewKeys]) {
+						if (k && !finalRoleKeys.has(k)) report.missingRoleKeys.add(k)
+					}
+
+					if (filteredMove.length || filteredApprove.length || filteredView.length) {
+						await this.api.setCardPolicy(this.boardId, Number(targetCard.id), {
+							move: filteredMove,
+							approve: filteredApprove,
+							view: filteredView,
+						})
+						report.appliedCardPolicies++
+					} else if (!hadAnyKeys) {
+						await this.api.clearCardPolicy(this.boardId, Number(targetCard.id))
+						report.clearedCardPolicies++
+					} else {
+						report.skippedCardPolicies++
+					}
+				}
+
+				const missing = Array.from(report.missingRoleKeys)
+				const msg = `Applied template. Roles +${report.createdRoles}, stacks +${report.createdStacks}, cards +${report.createdCards}, policies set ${report.appliedCardPolicies}, cleared ${report.clearedCardPolicies}, skipped ${report.skippedCardPolicies}.` +
+					(missing.length ? ` Missing role keys skipped: ${missing.join(', ')}.` : '') +
+					(report.ambiguousCards ? ` Ambiguous titles: ${report.ambiguousCards} (created new cards in template stacks).` : '')
+				showSuccess(msg)
+				await this.load()
+			} catch (e) {
+				showError(e?.response?.data?.ocs?.data?.message || e?.response?.data?.message || e?.message || this.t('deck', 'Failed to apply template'))
+			} finally {
+				this.applyingTemplateId = null
 			}
 		},
 		getStackTitle(stackId) {
@@ -451,11 +799,7 @@ export default {
 		async saveDefaults() {
 			this.savingDefaults = true
 			try {
-				if (this.approvedStackSelection) {
-					await this.api.updateSettings(this.boardId, { approvedStackId: this.approvedStackSelection.id })
-				}
 				await this.api.updateDefaults(this.boardId, {
-					view: this.defaults.view.map(o => o.value),
 					move: this.defaults.move.map(o => o.value),
 					approve: this.defaults.approve.map(o => o.value),
 				})
@@ -483,7 +827,6 @@ export default {
 			let errors = 0
 			try {
 				const payload = {
-					view: this.bulkEdits.view.map(o => o.value),
 					move: this.bulkEdits.move.map(o => o.value),
 					approve: this.bulkEdits.approve.map(o => o.value),
 				}
@@ -618,6 +961,29 @@ export default {
 	text-align: center;
 }
 
+.pc-spinner {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	border: 3px solid var(--pc-border);
+	border-top-color: var(--pc-primary);
+	animation: pc-spin 0.9s linear infinite;
+	margin: 0 0 12px;
+}
+
+.pc-error-icon,
+.pc-enable-icon {
+	font-size: 34px;
+	line-height: 1;
+	margin: 0 0 14px;
+}
+
+@keyframes pc-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
 .pc-policy-container {
 	display: flex;
 	flex-direction: column;
@@ -654,6 +1020,11 @@ export default {
 	gap: 12px;
 }
 
+.pc-emoji-icon {
+	font-size: 16px;
+	margin-right: 6px;
+}
+
 .pc-toolbar {
 	padding: 16px 32px;
 	display: flex;
@@ -665,13 +1036,23 @@ export default {
 }
 
 .pc-toolbar-search {
+	position: relative;
 	width: 300px;
 	max-width: 100%;
 }
 
+.pc-search-icon {
+	position: absolute;
+	left: 12px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 14px;
+	opacity: 0.6;
+}
+
 .pc-search-input {
 	width: 100%;
-	padding: 8px 14px;
+	padding: 8px 14px 8px 36px;
 	border: 1px solid var(--pc-border);
 	border-radius: 20px;
 	background: var(--pc-bg);
@@ -1166,5 +1547,81 @@ export default {
 	.pc-role-color-field {
 		width: auto;
 	}
+}
+
+/* Templates Modal Styling */
+.pc-templates-modal {
+	padding: 16px 8px;
+}
+
+.pc-box-header {
+	margin-bottom: 16px;
+	padding-bottom: 8px;
+}
+
+.pc-template-cards {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.pc-template-card {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 16px;
+	background: var(--color-background-hover);
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large);
+	transition: border-color 0.2s;
+}
+
+.pc-template-card:hover {
+	border-color: var(--color-primary-element);
+}
+
+.pc-template-card-info {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.pc-template-name {
+	font-size: 16px;
+	color: var(--color-main-text);
+}
+
+.pc-template-meta {
+	font-size: 12px;
+}
+
+.pc-template-card-actions {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+}
+
+.pc-modal-divider {
+	margin: 32px 0;
+	border: 0;
+	border-top: 1px solid var(--color-border);
+}
+
+.pc-template-create-row {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+}
+
+.pc-state-message {
+	padding: 20px;
+	text-align: center;
+	border-radius: var(--border-radius-large);
+	background: var(--color-background-hover);
+}
+
+.pc-state-message.error {
+	color: var(--color-error);
+	background: rgba(255, 0, 0, 0.05);
 }
 </style>

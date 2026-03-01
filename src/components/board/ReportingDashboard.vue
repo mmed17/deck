@@ -44,9 +44,11 @@
                     title="Open Tasks"
                     :left-label="'Important'"
                     :left-value="importantOpenTasks"
+                    :left-total="importantTasks"
                     :left-color="'#dc2626'"
                     :right-label="'Other'"
                     :right-value="otherOpenTasks"
+                    :right-total="otherTasks"
                     :right-color="'#334155'"
                     icon-color="#3b82f6" />
             </div>
@@ -151,8 +153,16 @@ export default {
             return this.cards.filter(card => this.isCardOpen(card) && this.hasImportantLabel(card)).length
         },
 
+        importantTasks() {
+            return this.cards.filter(card => card.archived !== true && this.hasImportantLabel(card)).length
+        },
+
         otherOpenTasks() {
             return this.cards.filter(card => this.isCardOpen(card) && !this.hasImportantLabel(card)).length
+        },
+
+        otherTasks() {
+            return this.cards.filter(card => card.archived !== true && !this.hasImportantLabel(card)).length
         },
         
         progressPercent() {
