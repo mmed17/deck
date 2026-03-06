@@ -199,6 +199,59 @@ class Notifier implements INotifier {
 				}
 				$notification->setLink($this->getCardUrl($boardId, $cardId));
 				break;
+			case 'card-moved':
+				$cardId = (int)$notification->getObjectId();
+				$stack = $this->stackMapper->findStackFromCardId($cardId);
+				$boardId = $stack ? (int)$stack->getBoardId() : null;
+				if (!$boardId) {
+					throw new AlreadyProcessedException();
+				}
+
+				$initiator = $this->userManager->get($params[4]);
+				if ($initiator !== null) {
+					$dn = $initiator->getDisplayName();
+				} else {
+					$dn = $params[4];
+				}
+				$notification->setParsedSubject(
+					$l->t('%s moved "%s" from "%s" to "%s" on "%s".', [$dn, $params[0], $params[2], $params[3], $params[1]])
+				);
+				$notification->setRichSubject(
+					$l->t('{user} moved {deck-card} from {stackBefore} to {stack} on {deck-board}.'),
+					[
+						'user' => [
+							'type' => 'user',
+							'id' => (string)$params[4],
+							'name' => $dn,
+						],
+						'deck-card' => [
+							'type' => 'deck-card',
+							'id' => (string)$cardId,
+							'name' => (string)$params[0],
+							'boardname' => (string)$params[1],
+							'stackname' => $stack->getTitle(),
+							'link' => $this->getCardUrl($boardId, $cardId),
+						],
+						'stackBefore' => [
+							'type' => 'highlight',
+							'id' => (string)$params[2],
+							'name' => (string)$params[2],
+						],
+						'stack' => [
+							'type' => 'highlight',
+							'id' => (string)$params[3],
+							'name' => (string)$params[3],
+						],
+						'deck-board' => [
+							'type' => 'deck-board',
+							'id' => (string)$boardId,
+							'name' => (string)$params[1],
+							'link' => $this->getBoardUrl($boardId),
+						],
+					]
+				);
+				$notification->setLink($this->getCardUrl($boardId, $cardId));
+				break;
 			case 'board-shared':
 				$boardId = (int)$notification->getObjectId();
 				if (!$boardId) {
@@ -227,6 +280,43 @@ class Notifier implements INotifier {
 							'id' => $params[1] ?? '',
 							'name' => $dn ?? '',
 						]
+					]
+				);
+				$notification->setLink($this->getBoardUrl($boardId));
+				break;
+			case 'board-role-assigned':
+				$boardId = (int)$notification->getObjectId();
+				if (!$boardId) {
+					throw new AlreadyProcessedException();
+				}
+				$initiator = $this->userManager->get($params[2]);
+				if ($initiator !== null) {
+					$dn = $initiator->getDisplayName();
+				} else {
+					$dn = $params[2];
+				}
+				$notification->setParsedSubject(
+					$l->t('You were added to the "%s" role on "%s" by %s.', [$params[1], $params[0], $dn])
+				);
+				$notification->setRichSubject(
+					$l->t('{user} added you to the {role} role on {deck-board}.'),
+					[
+						'user' => [
+							'type' => 'user',
+							'id' => $params[2] ?? '',
+							'name' => $dn ?? '',
+						],
+						'role' => [
+							'type' => 'highlight',
+							'id' => $params[1] ?? '',
+							'name' => $params[1] ?? '',
+						],
+						'deck-board' => [
+							'type' => 'deck-board',
+							'id' => (string)$boardId,
+							'name' => (string)$params[0],
+							'link' => $this->getBoardUrl($boardId),
+						],
 					]
 				);
 				$notification->setLink($this->getBoardUrl($boardId));

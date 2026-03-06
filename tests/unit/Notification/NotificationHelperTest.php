@@ -478,6 +478,84 @@ class NotificationHelperTest extends \Test\TestCase {
 		$this->notificationHelper->sendBoardShared(123, $acl);
 	}
 
+	public function testSendBoardRoleAssigned() {
+		$board = new Board();
+		$board->setId(123);
+		$board->setTitle('MyBoardTitle');
+		$this->boardMapper->expects($this->once())
+			->method('find')
+			->with(123)
+			->willReturn($board);
+
+		$notification = $this->createMock(INotification::class);
+		$notification->expects($this->once())->method('setApp')->with('deck')->willReturn($notification);
+		$notification->expects($this->once())->method('setUser')->with('userA')->willReturn($notification);
+		$notification->expects($this->once())->method('setObject')->with('board', 123)->willReturn($notification);
+		$notification->expects($this->once())->method('setSubject')->with('board-role-assigned', ['MyBoardTitle', 'Installer', 'admin'])->willReturn($notification);
+		$notification->expects($this->once())->method('setDateTime')->willReturn($notification);
+
+		$this->notificationManager->expects($this->once())
+			->method('createNotification')
+			->willReturn($notification);
+		$this->notificationManager->expects($this->once())
+			->method('notify')
+			->with($notification);
+
+		$this->notificationHelper->sendBoardRoleAssigned(123, 'Installer', 'userA');
+	}
+
+	public function testSendCardMoved() {
+		$board = new Board();
+		$board->setId(123);
+		$board->setTitle('MyBoardTitle');
+		$this->boardMapper->expects($this->once())
+			->method('find')
+			->with(123)
+			->willReturn($board);
+
+		$card = new Card();
+		$card->setId(1337);
+		$card->setTitle('MyCardTitle');
+		$this->cardMapper->expects($this->once())
+			->method('findBoardId')
+			->with(1337)
+			->willReturn(123);
+
+		$userA = $this->createUserMock('userA');
+		$userB = $this->createUserMock('userB');
+		$this->permissionService->expects($this->once())
+			->method('findUsers')
+			->with(123)
+			->willReturn([
+				'userA' => $userA,
+				'userB' => $userB,
+				'admin' => $this->createUserMock('admin'),
+			]);
+
+		$notification1 = $this->createMock(INotification::class);
+		$notification1->expects($this->once())->method('setApp')->with('deck')->willReturn($notification1);
+		$notification1->expects($this->once())->method('setUser')->with('userA')->willReturn($notification1);
+		$notification1->expects($this->once())->method('setObject')->with('card', 1337)->willReturn($notification1);
+		$notification1->expects($this->once())->method('setSubject')->with('card-moved', ['MyCardTitle', 'MyBoardTitle', 'Backlog', 'Doing', 'admin'])->willReturn($notification1);
+		$notification1->expects($this->once())->method('setDateTime')->willReturn($notification1);
+
+		$notification2 = $this->createMock(INotification::class);
+		$notification2->expects($this->once())->method('setApp')->with('deck')->willReturn($notification2);
+		$notification2->expects($this->once())->method('setUser')->with('userB')->willReturn($notification2);
+		$notification2->expects($this->once())->method('setObject')->with('card', 1337)->willReturn($notification2);
+		$notification2->expects($this->once())->method('setSubject')->with('card-moved', ['MyCardTitle', 'MyBoardTitle', 'Backlog', 'Doing', 'admin'])->willReturn($notification2);
+		$notification2->expects($this->once())->method('setDateTime')->willReturn($notification2);
+
+		$this->notificationManager->expects($this->exactly(2))
+			->method('createNotification')
+			->willReturnOnConsecutiveCalls($notification1, $notification2);
+		$this->notificationManager->expects($this->exactly(2))
+			->method('notify')
+			->withConsecutive([$notification1], [$notification2]);
+
+		$this->notificationHelper->sendCardMoved($card, 'Backlog', 'Doing');
+	}
+
 	public function testSendMention() {
 		$comment = $this->createMock(IComment::class);
 		$comment->expects($this->any())

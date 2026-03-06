@@ -199,6 +199,58 @@ class NotificationHelper {
 		}
 	}
 
+	public function sendBoardRoleAssigned(int $boardId, string $roleName, string $userId): void {
+		try {
+			$board = $this->getBoard($boardId);
+		} catch (Exception $e) {
+			return;
+		}
+
+		$notification = $this->notificationManager->createNotification();
+		$notification
+			->setApp('deck')
+			->setUser($userId)
+			->setDateTime(new DateTime())
+			->setObject('board', (string)$board->getId())
+			->setSubject('board-role-assigned', [
+				$board->getTitle(),
+				$roleName,
+				$this->currentUser,
+			]);
+		$this->notificationManager->notify($notification);
+	}
+
+	public function sendCardMoved(Card $card, string $fromStackTitle, string $toStackTitle): void {
+		$boardId = $this->cardMapper->findBoardId($card->getId());
+		try {
+			$board = $this->getBoard($boardId);
+		} catch (Exception $e) {
+			return;
+		}
+
+		/** @var User $user */
+		foreach ($this->permissionService->findUsers($boardId) as $user) {
+			if ($user->getUID() === $this->currentUser) {
+				continue;
+			}
+
+			$notification = $this->notificationManager->createNotification();
+			$notification
+				->setApp('deck')
+				->setUser((string)$user->getUID())
+				->setDateTime(new DateTime())
+				->setObject('card', (string)$card->getId())
+				->setSubject('card-moved', [
+					$card->getTitle(),
+					$board->getTitle(),
+					$fromStackTitle,
+					$toStackTitle,
+					$this->currentUser,
+				]);
+			$this->notificationManager->notify($notification);
+		}
+	}
+
 	public function sendMention(IComment $comment): void {
 		foreach ($comment->getMentions() as $mention) {
 			$card = $this->cardMapper->find($comment->getObjectId());

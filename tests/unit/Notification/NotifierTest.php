@@ -281,6 +281,103 @@ class NotifierTest extends \Test\TestCase {
 		];
 	}
 
+	public static function dataPrepareCardMoved() {
+		return [
+			[true], [false]
+		];
+	}
+
+	/** @dataProvider dataPrepareCardMoved */
+	public function testPrepareCardMoved($withUserFound = true) {
+		/** @var INotification|MockObject $notification */
+		$notification = $this->createMock(INotification::class);
+		$notification->expects($this->once())
+			->method('getApp')
+			->willReturn('deck');
+
+		$notification->expects($this->once())
+			->method('getSubjectParameters')
+			->willReturn(['Card title', 'Board title', 'Backlog', 'Doing', 'otheruser']);
+
+		$notification->expects($this->once())
+			->method('getSubject')
+			->willReturn('card-moved');
+		$notification->expects($this->once())
+			->method('getObjectId')
+			->willReturn('123');
+		$this->stackMapper->expects($this->once())
+			->method('findStackFromCardId')
+			->willReturn($this->buildMockStack(123));
+		if ($withUserFound) {
+			$user = $this->createMock(IUser::class);
+			$user->expects($this->any())
+				->method('getDisplayName')
+				->willReturn('Other User');
+			$dn = 'Other User';
+		} else {
+			$user = null;
+			$dn = 'otheruser';
+		}
+		$this->userManager->expects($this->once())
+			->method('get')
+			->with('otheruser')
+			->willReturn($user);
+
+		$expectedMessage = $dn . ' moved "Card title" from "Backlog" to "Doing" on "Board title".';
+		$notification->expects($this->once())
+			->method('setParsedSubject')
+			->with($expectedMessage);
+		$notification->expects($this->once())
+			->method('setRichSubject')
+			->with('{user} moved {deck-card} from {stackBefore} to {stack} on {deck-board}.', [
+				'user' => [
+					'type' => 'user',
+					'id' => 'otheruser',
+					'name' => $dn,
+				],
+				'deck-card' => [
+					'type' => 'deck-card',
+					'id' => '123',
+					'name' => 'Card title',
+					'boardname' => 'Board title',
+					'stackname' => null,
+					'link' => '/board/123/card/234',
+				],
+				'stackBefore' => [
+					'type' => 'highlight',
+					'id' => 'Backlog',
+					'name' => 'Backlog',
+				],
+				'stack' => [
+					'type' => 'highlight',
+					'id' => 'Doing',
+					'name' => 'Doing',
+				],
+				'deck-board' => [
+					'type' => 'deck-board',
+					'id' => '123',
+					'name' => 'Board title',
+					'link' => '/board/123',
+				]
+			]);
+
+		$this->url->expects($this->once())
+			->method('imagePath')
+			->with('deck', 'deck-dark.svg')
+			->willReturn('deck-dark.svg');
+		$this->url->expects($this->once())
+			->method('getAbsoluteURL')
+			->with('deck-dark.svg')
+			->willReturn('/absolute/deck-dark.svg');
+		$notification->expects($this->once())
+			->method('setIcon')
+			->with('/absolute/deck-dark.svg');
+
+		$actualNotification = $this->notifier->prepare($notification, 'en_US');
+
+		$this->assertEquals($notification, $actualNotification);
+	}
+
 	/** @dataProvider dataPrepareBoardShared */
 	public function testPrepareBoardShared($withUserFound = true) {
 		/** @var INotification|MockObject $notification */
@@ -329,6 +426,87 @@ class NotifierTest extends \Test\TestCase {
 				'deck-board' => [
 					'type' => 'deck-board',
 					'id' => 123,
+					'name' => 'Board title',
+					'link' => '/board/123',
+				]
+			]);
+
+		$this->url->expects($this->once())
+			->method('imagePath')
+			->with('deck', 'deck-dark.svg')
+			->willReturn('deck-dark.svg');
+		$this->url->expects($this->once())
+			->method('getAbsoluteURL')
+			->with('deck-dark.svg')
+			->willReturn('/absolute/deck-dark.svg');
+		$notification->expects($this->once())
+			->method('setIcon')
+			->with('/absolute/deck-dark.svg');
+
+		$actualNotification = $this->notifier->prepare($notification, 'en_US');
+
+		$this->assertEquals($notification, $actualNotification);
+	}
+
+	public static function dataPrepareBoardRoleAssigned() {
+		return [
+			[true], [false]
+		];
+	}
+
+	/** @dataProvider dataPrepareBoardRoleAssigned */
+	public function testPrepareBoardRoleAssigned($withUserFound = true) {
+		/** @var INotification|MockObject $notification */
+		$notification = $this->createMock(INotification::class);
+		$notification->expects($this->once())
+			->method('getApp')
+			->willReturn('deck');
+
+		$notification->expects($this->once())
+			->method('getSubjectParameters')
+			->willReturn(['Board title', 'Installer', 'otheruser']);
+
+		$notification->expects($this->once())
+			->method('getSubject')
+			->willReturn('board-role-assigned');
+		$notification->expects($this->once())
+			->method('getObjectId')
+			->willReturn('123');
+		if ($withUserFound) {
+			$user = $this->createMock(IUser::class);
+			$user->expects($this->any())
+				->method('getDisplayName')
+				->willReturn('Other User');
+			$dn = 'Other User';
+		} else {
+			$user = null;
+			$dn = 'otheruser';
+		}
+		$this->userManager->expects($this->once())
+			->method('get')
+			->with('otheruser')
+			->willReturn($user);
+
+		$expectedMessage = 'You were added to the "Installer" role on "Board title" by ' . $dn . '.';
+		$notification->expects($this->once())
+			->method('setParsedSubject')
+			->with($expectedMessage);
+		$notification->expects($this->once())
+			->method('setRichSubject')
+			->with('{user} added you to the {role} role on {deck-board}.', [
+				'user' => [
+					'type' => 'user',
+					'id' => 'otheruser',
+					'name' => $dn,
+				],
+				'role' => [
+					'type' => 'highlight',
+					'id' => 'Installer',
+					'name' => 'Installer',
+				],
+				'deck-board' => [
+					'type' => 'deck-board',
+					'id' => '123',
 					'name' => 'Board title',
 					'link' => '/board/123',
 				]

@@ -40,6 +40,8 @@ use OCA\Deck\Model\CardDetails;
 use OCA\Deck\Notification\NotificationHelper;
 use OCA\Deck\StatusException;
 use OCA\Deck\Validators\CardServiceValidator;
+use OCA\ProjectCreatorAIO\Db\ProjectMapper;
+use OCA\ProjectCreatorAIO\Service\ProjectDeckActivityService;
 use OCP\Activity\IEvent;
 use OCP\Collaboration\Reference\IReferenceManager;
 use OCP\Comments\ICommentsManager;
@@ -99,6 +101,12 @@ class CardServiceTest extends TestCase {
 
 	/** @var AssignmentService|MockObject */
 	private $assignmentService;
+	/** @var ProjectMapper|MockObject */
+	private $projectMapper;
+	/** @var ProjectDeckActivityService|MockObject */
+	private $projectDeckActivityService;
+	/** @var CardPolicyService|MockObject */
+	private $cardPolicyService;
 
 	public function setUp(): void {
 		parent::setUp();
@@ -123,6 +131,9 @@ class CardServiceTest extends TestCase {
 		$this->cardServiceValidator = $this->createMock(CardServiceValidator::class);
 		$this->assignmentService = $this->createMock(AssignmentService::class);
 		$this->referenceManager = $this->createMock(IReferenceManager::class);
+		$this->projectMapper = $this->createMock(ProjectMapper::class);
+		$this->projectDeckActivityService = $this->createMock(ProjectDeckActivityService::class);
+		$this->cardPolicyService = $this->createMock(CardPolicyService::class);
 
 		$this->logger->expects($this->any())->method('error');
 
@@ -148,6 +159,9 @@ class CardServiceTest extends TestCase {
 			$this->cardServiceValidator,
 			$this->assignmentService,
 			$this->referenceManager,
+			$this->projectMapper,
+			$this->projectDeckActivityService,
+			$this->cardPolicyService,
 			'user1'
 		);
 	}
@@ -335,6 +349,10 @@ class CardServiceTest extends TestCase {
 			->method('find')
 			->with(234)
 			->willReturn($stack);
+		$this->notificationHelper->expects($this->never())
+			->method('sendCardMoved');
+		$this->projectDeckActivityService->expects($this->never())
+			->method('recordCardMoveByBoardId');
 		$actual = $this->cardService->update(123, 'newtitle', 234, 'text', 'admin', 'foo', 999, '2017-01-01 00:00:00', null);
 		$this->assertEquals('newtitle', $actual->getTitle());
 		$this->assertEquals(234, $actual->getStackId());
@@ -391,11 +409,55 @@ class CardServiceTest extends TestCase {
 		$card = new Card();
 		$card->setStackId(123);
 		$this->cardMapper->expects($this->once())->method('find')->willReturn($card);
+		$this->notificationHelper->expects($this->never())
+			->method('sendCardMoved');
+		$this->projectDeckActivityService->expects($this->never())
+			->method('recordCardMoveByBoardId');
 		$result = $this->cardService->reorder($cardId, 123, $newPosition);
 		foreach ($result as $card) {
 			$actual[$card->getOrder()] = $card->getId();
 		}
 		$this->assertEquals($order, $actual);
+	}
+
+	public function testReorderAcrossStacksSendsMoveNotification() {
+		$cards = $this->getCards();
+		$card = new Card();
+		$card->setId(1);
+		$card->setStackId(111);
+		$card->setTitle('Moved card');
+
+		$beforeStack = new Stack();
+		$beforeStack->setId(111);
+		$beforeStack->setTitle('Backlog');
+
+		$afterStack = new Stack();
+		$afterStack->setId(123);
+		$afterStack->setTitle('Doing');
+		$afterStack->setBoardId(555);
+
+		$this->cardMapper->expects($this->once())
+			->method('find')
+			->willReturn($card);
+		$this->cardMapper->expects($this->once())
+			->method('findAll')
+			->with(123)
+			->willReturn($cards);
+		$this->stackMapper->expects($this->exactly(2))
+			->method('find')
+			->willReturnOnConsecutiveCalls($beforeStack, $afterStack);
+		$this->notificationHelper->expects($this->once())
+			->method('sendCardMoved')
+			->with(
+				$this->isInstanceOf(Card::class),
+				'Backlog',
+				'Doing',
+			);
+		$this->projectDeckActivityService->expects($this->once())
+			->method('recordCardMoveByBoardId')
+			->with(555);
+
+		$this->cardService->reorder(1, 123, 0);
 	}
 
 	private function getCards() {

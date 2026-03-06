@@ -38,6 +38,7 @@ use OCP\IUserManager;
 use Psr\Log\LoggerInterface;
 use OCA\ProjectCreatorAIO\Db\ProjectMapper;
 use OCA\ProjectCreatorAIO\Db\Project;
+use OCA\ProjectCreatorAIO\Service\ProjectDeckActivityService;
 use OCA\Deck\Service\CardPolicyService;
 
 class CardService
@@ -65,6 +66,7 @@ class CardService
 		private AssignmentService $assignmentService,
 		private IReferenceManager $referenceManager,
 		private ProjectMapper $projectMapper,
+		private ProjectDeckActivityService $projectDeckActivityService,
 		private CardPolicyService $cardPolicyService,
 		private ?string $userId,
 	) {
@@ -420,6 +422,8 @@ class CardService
 			$this->changeHelper->boardChanged($board->getId());
 		}
 
+		$this->notifyCardMovedIfNeeded($card, $beforeStackId, $toStackId);
+
 		if ($resetDuedateNotification) {
 			$this->notificationHelper->markDuedateAsRead($card);
 		}
@@ -569,6 +573,7 @@ class CardService
 		}
 		$changes->setAfter($card);
 		$this->activityManager->triggerUpdateEvents(ActivityManager::DECK_OBJECT_CARD, $changes, ActivityManager::SUBJECT_CARD_UPDATE);
+		$this->notifyCardMovedIfNeeded($card, $oldStackId, (int) $stackId);
 
 		$cards = $this->cardMapper->findAll($stackId);
 		$result = [];
@@ -596,6 +601,22 @@ class CardService
 		$this->eventDispatcher->dispatchTyped(new CardUpdatedEvent($card));
 
 		return array_values($result);
+	}
+
+	private function notifyCardMovedIfNeeded(Card $card, int $beforeStackId, int $afterStackId): void
+	{
+		if ($beforeStackId <= 0 || $afterStackId <= 0 || $beforeStackId === $afterStackId) {
+			return;
+		}
+
+		$beforeStack = $this->stackMapper->find($beforeStackId);
+		$currentStack = $this->stackMapper->find($afterStackId);
+		$this->notificationHelper->sendCardMoved(
+			$card,
+			(string) $beforeStack->getTitle(),
+			(string) $currentStack->getTitle(),
+		);
+		$this->projectDeckActivityService->recordCardMoveByBoardId((int) $currentStack->getBoardId());
 	}
 
 	/**

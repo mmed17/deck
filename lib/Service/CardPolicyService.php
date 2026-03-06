@@ -26,6 +26,7 @@ use OCA\Deck\Db\CardPolicyRole;
 use OCA\Deck\Db\CardPolicyRoleMapper;
 use OCA\Deck\Db\StackMapper;
 use OCA\Deck\NoPermissionException;
+use OCA\Deck\Notification\NotificationHelper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IGroupManager;
 use OCP\IDBConnection;
@@ -65,6 +66,7 @@ class CardPolicyService
 		private readonly CardPolicyRoleMapper $cardPolicyRoleMapper,
 		private readonly StackMapper $stackMapper,
 		private readonly PermissionService $permissionService,
+		private readonly NotificationHelper $notificationHelper,
 		private readonly CirclesService $circlesService,
 		private readonly IGroupManager $groupManager,
 		private readonly LoggerInterface $logger,
@@ -491,7 +493,17 @@ class CardPolicyService
 		$membership->setParticipant($participant);
 		$membership->setParticipantType($participantType);
 		$membership->setCreatedAt(new DateTime('now'));
-		return $this->membershipMapper->insert($membership);
+		$membership = $this->membershipMapper->insert($membership);
+
+		if (
+			$participantType === BoardPolicyRoleMembership::PARTICIPANT_TYPE_USER
+			&& $participant !== ''
+			&& $participant !== (string) $this->userId
+		) {
+			$this->notificationHelper->sendBoardRoleAssigned($boardId, (string) $role->getName(), $participant);
+		}
+
+		return $membership;
 	}
 
 	public function createRole(int $boardId, string $roleKey, string $name, string $color = '#000000'): BoardPolicyRole
