@@ -51,4 +51,21 @@ class BoardPolicyRoleMembershipMapper extends QBMapper
 			->andWhere($qb->expr()->in('role_id', $qb->createNamedParameter($roleIds, IQueryBuilder::PARAM_INT_ARRAY)));
 		return $this->findEntities($qb);
 	}
+
+
+	public function findByIdAndBoard(int $id, int $boardId): ?BoardPolicyRoleMembership
+	{
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('board_id', $qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)))
+			->setMaxResults(1);
+		try {
+			return $this->findEntity($qb);
+		} catch (\Throwable $e) {
+			return null;
+		}
+	}
+
 }

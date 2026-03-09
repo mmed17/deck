@@ -30,6 +30,8 @@ use OCA\Deck\Service\StackService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\IRequest;
+use OCP\IUser;
+use OCP\IUserSession;
 
 class StackApiControllerTest extends \Test\TestCase {
 	private $appName = 'deck';
@@ -38,6 +40,7 @@ class StackApiControllerTest extends \Test\TestCase {
 	private $controller;
 	private $boardService;
 	private $stackService;
+	private $userSession;
 	private $exampleStack = [];
 	private $exampleBoard = [];
 
@@ -46,6 +49,10 @@ class StackApiControllerTest extends \Test\TestCase {
 		$this->request = $this->createMock(IRequest::class);
 		$this->boardService = $this->createMock(BoardService::class);
 		$this->stackService = $this->createMock(StackService::class);
+		$this->userSession = $this->createMock(IUserSession::class);
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn($this->userId);
+		$this->userSession->method('getUser')->willReturn($user);
 
 		$this->exampleBoard['boardId'] = '89';
 
@@ -58,7 +65,8 @@ class StackApiControllerTest extends \Test\TestCase {
 			$this->appName,
 			$this->request,
 			$this->stackService,
-			$this->boardService
+			$this->boardService,
+			$this->userSession
 		);
 	}
 
@@ -71,6 +79,7 @@ class StackApiControllerTest extends \Test\TestCase {
 
 		$this->stackService->expects($this->once())
 			->method('findAll')
+			->with($this->userId, $this->exampleBoard['boardId'], 0)
 			->willReturn($stacks);
 
 		$this->request->expects($this->any())

@@ -167,6 +167,11 @@ class CardPolicyService
 
 		$userRoleIds = $this->getUserRoleIdsForBoard($boardId, $uid);
 		if ($userRoleIds === []) {
+			$this->logger->warning('Deck card-policy user has no matched role ids', [
+				'boardId' => $boardId,
+				'userId' => $uid,
+				'cardCount' => \count($cards),
+			]);
 			return [];
 		}
 
@@ -174,10 +179,7 @@ class CardPolicyService
 		$defaultViewRoleIds = $this->getDefaultRoleIdsForAction($boardId, self::ACTION_VIEW);
 		$cardIds = [];
 		foreach ($cards as $card) {
-			if (!is_object($card) || !method_exists($card, 'getId')) {
-				continue;
-			}
-			$cardId = (int) $card->getId();
+			$cardId = $this->extractCardId($card);
 			if ($cardId > 0) {
 				$cardIds[] = $cardId;
 			}
@@ -193,10 +195,7 @@ class CardPolicyService
 		$out = [];
 		$userRoleSet = array_fill_keys($userRoleIds, true);
 		foreach ($cards as $card) {
-			if (!is_object($card) || !method_exists($card, 'getId')) {
-				continue;
-			}
-			$cardId = (int) $card->getId();
+			$cardId = $this->extractCardId($card);
 			if ($cardId <= 0) {
 				continue;
 			}
@@ -219,7 +218,31 @@ class CardPolicyService
 			}
 		}
 
+		if ($cards !== [] && $out === []) {
+			$this->logger->warning('Deck card-policy matched roles but no visible cards', [
+				'boardId' => $boardId,
+				'userId' => $uid,
+				'userRoleIds' => $userRoleIds,
+				'defaultAllowedRoleIds' => $defaultAllowedRoleIds,
+				'defaultViewRoleIds' => $defaultViewRoleIds,
+				'cardCount' => \count($cards),
+			]);
+		}
+
 		return $out;
+	}
+
+	private function extractCardId(mixed $card): int
+	{
+		if (!is_object($card)) {
+			return 0;
+		}
+
+		try {
+			return (int) $card->getId();
+		} catch (\Throwable $e) {
+			return isset($card->id) ? (int) $card->id : 0;
+		}
 	}
 
 	public function getApprovedStackId(int $boardId): ?int
@@ -599,9 +622,9 @@ class CardPolicyService
 	public function deleteMembership(int $boardId, int $membershipId): void
 	{
 		$this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
-		$membership = $this->membershipMapper->find($membershipId);
-		if ((int) $membership->getBoardId() !== $boardId) {
-			throw new NoPermissionException('Membership does not belong to this board');
+		$membership = $this->membershipMapper->findByIdAndBoard($membershipId, $boardId);
+		if (!$membership instanceof BoardPolicyRoleMembership) {
+			throw new BadRequestException('Membership not found');
 		}
 		$this->membershipMapper->delete($membership);
 	}
@@ -752,6 +775,19 @@ class CardPolicyService
 			}
 		}
 		$out = array_values(array_unique(array_filter($out, static fn (int $id) => $id > 0)));
+		if ($memberships !== [] && $out === []) {
+			$this->logger->warning('Deck card-policy memberships did not match user', [
+				'boardId' => $boardId,
+				'userId' => $userId,
+				'memberships' => array_map(static function (BoardPolicyRoleMembership $membership): array {
+					return [
+						'participant' => (string) $membership->getParticipant(),
+						'participantType' => (int) $membership->getParticipantType(),
+						'roleId' => (int) $membership->getRoleId(),
+					];
+				}, $memberships),
+			]);
+		}
 		$this->userRoleIdsCache[$cacheKey] = $out;
 		return $out;
 	}

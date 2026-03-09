@@ -27,6 +27,8 @@ namespace OCA\Deck\Controller;
 use OCA\Deck\Service\StackService;
 use OCP\AppFramework\Controller;
 use OCP\IRequest;
+use OCP\IUser;
+use OCP\IUserSession;
 
 class StackControllerTest extends \Test\TestCase {
 
@@ -36,6 +38,8 @@ class StackControllerTest extends \Test\TestCase {
 	private $request;
 	/** @var StackService|\PHPUnit\Framework\MockObject\MockObject */
 	private $stackService;
+	/** @var IUserSession|\PHPUnit\Framework\MockObject\MockObject */
+	private $userSession;
 	/** @var string */
 	private $userId = 'user';
 
@@ -48,16 +52,22 @@ class StackControllerTest extends \Test\TestCase {
 			'\OCA\Deck\Service\StackService')
 			->disableOriginalConstructor()
 			->getMock();
+		$user = $this->createMock(IUser::class);
+		$user->method('getUID')->willReturn($this->userId);
+		$this->userSession = $this->createMock(IUserSession::class);
+		$this->userSession->method('getUser')->willReturn($user);
 		$this->controller = new StackController(
 			'deck',
 			$this->request,
 			$this->stackService,
-			$this->userId
+			$this->userSession
 		);
 	}
 
 	public function testIndex() {
-		$this->stackService->expects($this->once())->method('findAll');
+		$this->stackService->expects($this->once())
+			->method('findAll')
+			->with($this->userId, 1);
 		$this->controller->index(1);
 	}
 

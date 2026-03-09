@@ -12,13 +12,14 @@ use OCA\Deck\Service\StackService;
 use OCP\AppFramework\Controller;
 
 use OCP\IRequest;
+use OCP\IUserSession;
 
 class StackController extends Controller {
 	public function __construct(
 		string $appName,
 		IRequest $request,
 		private StackService $stackService,
-		private $userId,
+		private IUserSession $userSession,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -29,7 +30,9 @@ class StackController extends Controller {
 	 * @return array
 	 */
 	public function index($boardId) {
-		return $this->stackService->findAll($this->userId, $boardId);
+		$user = $this->userSession->getUser();
+		$userId = $user !== null ? $user->getUID() : '';
+		return $this->stackService->findAll($userId, $boardId);
 	}
 
 	/**

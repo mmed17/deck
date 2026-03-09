@@ -54,7 +54,8 @@ class StackApiController extends ApiController {
 			$since = $date->getTimestamp();
 		}
 		
-		$userId = $this->userSession->getUID();
+		$user = $this->userSession->getUser();
+		$userId = $user !== null ? $user->getUID() : '';
 		$stacks = $this->stackService->findAll(
 			$userId,
 			$this->request->getParam('boardId'), 

@@ -208,6 +208,8 @@ class CardPolicyController extends OCSController
 			return new DataResponse([], Http::STATUS_NO_CONTENT);
 		} catch (NoPermissionException $e) {
 			return new DataResponse(['message' => $e->getMessage()], Http::STATUS_FORBIDDEN);
+		} catch (BadRequestException $e) {
+			return new DataResponse(['message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
 		} catch (\Throwable $e) {
 			$this->logger->error('Error deleting membership: ' . $e->getMessage(), ['exception' => $e]);
 			return new DataResponse(['message' => 'Internal error'], Http::STATUS_INTERNAL_SERVER_ERROR);

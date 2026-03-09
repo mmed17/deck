@@ -25,6 +25,7 @@ use OCA\Deck\NoPermissionException;
 use OCA\Deck\StatusException;
 use OCA\Deck\Validators\StackServiceValidator;
 use OCP\EventDispatcher\IEventDispatcher;
+use OCP\Server;
 use Psr\Log\LoggerInterface;
 
 class StackService {
@@ -87,16 +88,25 @@ class StackService {
 
 		$boardId = (int) $stack->getBoardId();
 		$stackId = (int) $stack->getId();
-		$isCardPolicy = $this->cardPolicyService !== null && $boardId > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardId);
+		$cardPolicyService = $this->getCardPolicyService();
+		$isCardPolicy = $cardPolicyService !== null && $boardId > 0 && $cardPolicyService->isCardPolicyEnabled($boardId);
 
 		if ($isCardPolicy) {
-			$cards = $this->cardMapper->findAll(
+			$allCards = $this->cardMapper->findAll(
 				$stackId,
 				null,
 				null,
 				$since
 			);
-			$cards = $this->cardPolicyService->filterCardsForUser($boardId, (string) $userId, $cards);
+			$cards = $cardPolicyService->filterCardsForUser($boardId, (string) $userId, $allCards);
+			if ($allCards !== [] && $cards === []) {
+				$this->logger->warning('Deck card-policy stack returned no visible cards', [
+					'boardId' => $boardId,
+					'stackId' => $stackId,
+					'userId' => (string) $userId,
+					'totalCards' => \count($allCards),
+				]);
+			}
 		} elseif ($board->getOwner() === $userId) {
 			$cards = $this->cardMapper->findAll(
 				$stackId,
@@ -145,8 +155,9 @@ class StackService {
 		$boardId = (int) $stack->getBoardId();
 
 		$cards = $this->cardMapper->findAll($stackId);
-		if ($this->cardPolicyService !== null && $boardId > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardId)) {
-			$cards = $this->cardPolicyService->filterCardsForUser($boardId, $this->userId, $cards);
+		$cardPolicyService = $this->getCardPolicyService();
+		if ($cardPolicyService !== null && $boardId > 0 && $cardPolicyService->isCardPolicyEnabled($boardId)) {
+			$cards = $cardPolicyService->filterCardsForUser($boardId, $this->userId, $cards);
 		}
 
 		$cards = array_map(
@@ -219,10 +230,11 @@ class StackService {
 		$this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_READ);
 		$stacks = $this->stackMapper->findAll($boardId);
 		$labels = $this->labelMapper->getAssignedLabelsForBoard($boardId);
+		$cardPolicyService = $this->getCardPolicyService();
 		foreach ($stacks as $stackIndex => $stack) {
 			$cards = $this->cardMapper->findAllArchived($stack->id);
-			if ($this->cardPolicyService !== null && $this->cardPolicyService->isCardPolicyEnabled((int) $boardId)) {
-				$cards = $this->cardPolicyService->filterCardsForUser((int) $boardId, $this->userId, $cards);
+			if ($cardPolicyService !== null && $cardPolicyService->isCardPolicyEnabled((int) $boardId)) {
+				$cards = $cardPolicyService->filterCardsForUser((int) $boardId, $this->userId, $cards);
 			}
 			foreach ($cards as $cardIndex => $card) {
 				if (array_key_exists($card->id, $labels)) {
@@ -234,6 +246,23 @@ class StackService {
 		}
 
 		return $stacks;
+	}
+
+	private function getCardPolicyService(): ?CardPolicyService {
+		if ($this->cardPolicyService instanceof CardPolicyService) {
+			return $this->cardPolicyService;
+		}
+
+		try {
+			$this->cardPolicyService = Server::get(CardPolicyService::class);
+		} catch (\Throwable $e) {
+			$this->logger->warning('Deck StackService could not resolve CardPolicyService', [
+				'exception' => $e,
+			]);
+			$this->cardPolicyService = null;
+		}
+
+		return $this->cardPolicyService;
 	}
 
 	/**
