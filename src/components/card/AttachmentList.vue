@@ -54,6 +54,41 @@
 							<span class="attachment--info">{{ t('deck', 'Pending share') }}</span>
 						</div>
 					</a>
+					<div v-if="showOcrForAttachment(attachment)" class="attachment__ocr" @click.stop>
+						<select class="attachment__ocr-select"
+							:value="documentTypeValue(attachmentFileId(attachment))"
+							:disabled="documentTypesLoading || isAssigning(attachmentFileId(attachment)) || documentTypes.length === 0"
+							@change="assignDocumentType(attachment, $event.target.value)">
+							<option value="">
+								{{ documentTypes.length === 0 ? t('deck', 'No types') : t('deck', 'Assign type...') }}
+							</option>
+							<option v-for="type in documentTypes" :key="`doc-type-${type.id}`" :value="type.id">
+								{{ type.name }}
+							</option>
+						</select>
+						<div class="attachment__ocr-status"
+							:class="statusBadgeClass(attachmentFileId(attachment))"
+							:title="statusTooltip(attachmentFileId(attachment))">
+							<component :is="statusIcon(attachmentFileId(attachment))" :size="16" />
+						</div>
+						<button v-if="canOpenExtractedDataModal(attachmentFileId(attachment))"
+							type="button"
+							class="attachment__ocr-icon-btn"
+							:title="t('deck', 'View Extracted Data')"
+							@click="openExtractedDataModal(attachmentFileId(attachment))">
+							<EyeOutline :size="16" />
+						</button>
+						<button v-if="canReprocess(attachmentFileId(attachment))"
+							type="button"
+							class="attachment__ocr-icon-btn"
+							:title="t('deck', 'Reprocess OCR')"
+							@click="reprocessAttachment(attachment)">
+							<Refresh :size="16" />
+						</button>
+						<div v-if="isProcessingBusy(attachmentFileId(attachment))" class="attachment__ocr-loading">
+							<NcLoadingIcon :size="18" />
+						</div>
+					</div>
 				</div>
 				<NcActions v-if="selectable">
 					<NcActionButton icon="icon-confirm" @click="$emit('select-attachment', attachment)">
@@ -83,12 +118,47 @@
 				</NcActions>
 			</li>
 		</ul>
+
+		<NcModal v-if="activeExtractedFileId" :title="t('deck', 'Extracted Data')" @close="closeExtractedDataModal">
+			<div class="attachment__ocr-modal">
+				<div class="attachment__ocr-modal-filename">
+					{{ activeExtractedFileName }}
+				</div>
+				<div v-if="activeExtractedData.length === 0" class="attachment__ocr-empty">
+					{{ t('deck', 'No data extracted yet.') }}
+				</div>
+				<div v-if="activeExtractedData.length > 0 && activeMissingFieldsCount > 0" class="attachment__ocr-warning">
+					{{ t('deck', '{count} field(s) still missing.', { count: activeMissingFieldsCount }) }}
+				</div>
+				<table v-if="activeExtractedData.length > 0" class="attachment__ocr-table">
+					<tbody>
+						<tr v-for="item in activeExtractedData" :key="item.key">
+							<th>
+								{{ item.name }}
+								<span v-if="item.missing" class="attachment__ocr-missing-pill">{{ t('deck', 'Missing') }}</span>
+							</th>
+							<td>
+								<input class="attachment__ocr-input"
+									:value="activeExtractedDraft[item.key] ?? ''"
+									@input="setActiveExtractedDraft(item.key, $event.target.value)">
+							</td>
+						</tr>
+					</tbody>
+				</table>
+				<div v-if="activeExtractedData.length > 0" class="attachment__ocr-actions">
+					<NcButton :disabled="isSavingExtracted(activeExtractedFileId)" @click="saveActiveExtractedData">
+						{{ isSavingExtracted(activeExtractedFileId) ? t('deck', 'Saving...') : t('deck', 'Save extracted fields') }}
+					</NcButton>
+				</div>
+			</div>
+		</NcModal>
 	</AttachmentDragAndDrop>
 </template>
 
 <script>
 import axios from '@nextcloud/axios'
-import { NcActions, NcActionButton, NcActionLink, NcButton } from '@nextcloud/vue'
+import { NcActions, NcActionButton, NcActionLink, NcButton, NcModal } from '@nextcloud/vue'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import AttachmentDragAndDrop from '../AttachmentDragAndDrop.vue'
 import relativeDate from '../../mixins/relativeDate.js'
 import { formatFileSize } from '@nextcloud/files'
@@ -98,7 +168,25 @@ import { mapState, mapActions } from 'vuex'
 import { loadState } from '@nextcloud/initial-state'
 import attachmentUpload from '../../mixins/attachmentUpload.js'
 import { getFilePickerBuilder } from '@nextcloud/dialogs'
+import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
+import CheckCircleOutline from 'vue-material-design-icons/CheckCircleOutline.vue'
+import ClockOutline from 'vue-material-design-icons/ClockOutline.vue'
+import EyeOutline from 'vue-material-design-icons/EyeOutline.vue'
+import FileQuestionOutline from 'vue-material-design-icons/FileQuestionOutline.vue'
+import Refresh from 'vue-material-design-icons/Refresh.vue'
+import Sync from 'vue-material-design-icons/Sync.vue'
+import { ProjectOcrApi } from '../../services/ProjectOcrApi.js'
+
 const maxUploadSizeState = loadState('deck', 'maxUploadSize', -1)
+const projectOcrApi = new ProjectOcrApi()
+const SUPPORTED_OCR_MIME_TYPES = [
+	'application/pdf',
+	'image/jpeg',
+	'image/png',
+	'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+	'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+	'application/vnd.ms-excel',
+]
 
 const picker = getFilePickerBuilder(t('deck', 'File to share'))
 	.setMultiSelect(false)
@@ -109,11 +197,20 @@ const picker = getFilePickerBuilder(t('deck', 'File to share'))
 export default {
 	name: 'AttachmentList',
 	components: {
+		AlertCircleOutline,
+		AttachmentDragAndDrop,
+		CheckCircleOutline,
+		ClockOutline,
+		EyeOutline,
+		FileQuestionOutline,
 		NcActions,
 		NcActionButton,
 		NcActionLink,
 		NcButton,
-		AttachmentDragAndDrop,
+		NcLoadingIcon,
+		NcModal,
+		Refresh,
+		Sync,
 	},
 	mixins: [relativeDate, attachmentUpload],
 
@@ -125,10 +222,12 @@ export default {
 		selectable: {
 			type: Boolean,
 			required: false,
+			default: false,
 		},
 		removable: {
 			type: Boolean,
 			required: false,
+			default: false,
 		},
 	},
 	data() {
@@ -138,6 +237,18 @@ export default {
 			overwriteAttachment: null,
 			isDraggingOver: false,
 			maxUploadSize: maxUploadSizeState,
+			ocrBoardId: null,
+			projectId: null,
+			documentTypes: [],
+			documentTypesLoading: false,
+			documentTypesError: '',
+			processingByFileId: {},
+			processingLoadingByFileId: {},
+			assigningByFileId: {},
+			feedbackByFileId: {},
+			activeExtractedFileId: null,
+			activeExtractedDraft: {},
+			savingExtractedFileId: null,
 		}
 	},
 	computed: {
@@ -172,6 +283,48 @@ export default {
 		formattedFileSize() {
 			return (filesize) => formatFileSize(filesize)
 		},
+		boardId() {
+			const fromBoard = Number(this.currentBoard?.id)
+			if (Number.isFinite(fromBoard) && fromBoard > 0) {
+				return fromBoard
+			}
+
+			const fromRoute = Number(this.$route?.params?.id)
+			if (Number.isFinite(fromRoute) && fromRoute > 0) {
+				return fromRoute
+			}
+
+			return null
+		},
+		canUseOcr() {
+			return this.removable && !this.selectable
+		},
+		activeExtractedData() {
+			if (!this.activeExtractedFileId) {
+				return []
+			}
+			return this.extractedEntries(this.activeExtractedFileId, true)
+		},
+		activeMissingFieldsCount() {
+			if (!this.activeExtractedFileId) {
+				return 0
+			}
+			return this.missingFieldsCount(this.activeExtractedFileId)
+		},
+		activeExtractedFileName() {
+			if (!this.activeExtractedFileId) {
+				return ''
+			}
+
+			const attachment = this.attachments.find((entry) => this.attachmentFileId(entry) === Number(this.activeExtractedFileId))
+			if (!attachment) {
+				return ''
+			}
+
+			const base = this.attachmentBasename(attachment)
+			const ext = this.attachmentExtension(attachment)
+			return ext ? `${base}.${ext}` : base
+		},
 		...mapState({
 			currentBoard: state => state.currentBoard,
 		}),
@@ -199,13 +352,455 @@ export default {
 			immediate: true,
 			handler() {
 				this.fetchAttachments(this.cardId)
+				this.resetAttachmentOcrState()
+				this.queueVisibleProcessingLoad()
 			},
+		},
+		boardId: {
+			immediate: true,
+			handler() {
+				this.initializeOcrContext()
+			},
+		},
+		attachments() {
+			this.queueVisibleProcessingLoad()
 		},
 	},
 	methods: {
 		...mapActions([
 			'fetchAttachments',
 		]),
+		resetAttachmentOcrState() {
+			this.processingByFileId = {}
+			this.processingLoadingByFileId = {}
+			this.assigningByFileId = {}
+			this.feedbackByFileId = {}
+			this.activeExtractedFileId = null
+			this.activeExtractedDraft = {}
+			this.savingExtractedFileId = null
+		},
+		resetOcrContextState() {
+			this.ocrBoardId = null
+			this.projectId = null
+			this.documentTypes = []
+			this.documentTypesLoading = false
+			this.documentTypesError = ''
+			this.resetAttachmentOcrState()
+		},
+		attachmentFileId(attachment) {
+			const id = Number(attachment?.extendedData?.fileid)
+			if (!Number.isFinite(id) || id <= 0) {
+				return 0
+			}
+			return id
+		},
+		showOcrForAttachment(attachment) {
+			if (!this.canUseOcr) {
+				return false
+			}
+
+			const projectId = Number(this.projectId)
+			if (!Number.isFinite(projectId) || projectId <= 0) {
+				return false
+			}
+
+			if (Number(attachment?.deletedAt ?? -1) !== 0) {
+				return false
+			}
+
+			const fileId = this.attachmentFileId(attachment)
+			if (fileId <= 0) {
+				return false
+			}
+
+			const mimeType = String(attachment?.extendedData?.mimetype || '').toLowerCase()
+			return SUPPORTED_OCR_MIME_TYPES.includes(mimeType)
+		},
+		async initializeOcrContext() {
+			if (!this.canUseOcr) {
+				this.resetOcrContextState()
+				return
+			}
+
+			const boardId = Number(this.boardId)
+			if (!Number.isFinite(boardId) || boardId <= 0) {
+				this.resetOcrContextState()
+				return
+			}
+
+			if (Number(this.ocrBoardId) === boardId && Number(this.projectId) > 0) {
+				this.queueVisibleProcessingLoad()
+				return
+			}
+
+			this.resetOcrContextState()
+			this.ocrBoardId = boardId
+
+			try {
+				const project = await projectOcrApi.getProjectByBoard(boardId)
+				const projectId = Number(project?.id)
+				if (!Number.isFinite(projectId) || projectId <= 0) {
+					this.projectId = null
+					return
+				}
+
+				this.projectId = projectId
+				await this.loadDocumentTypes()
+				this.queueVisibleProcessingLoad()
+			} catch (error) {
+				console.error('Failed to initialize OCR context for attachments:', error)
+				this.projectId = null
+			}
+		},
+		async loadDocumentTypes() {
+			const projectId = Number(this.projectId)
+			if (!Number.isFinite(projectId) || projectId <= 0) {
+				this.documentTypes = []
+				return
+			}
+
+			this.documentTypesLoading = true
+			this.documentTypesError = ''
+			try {
+				this.documentTypes = await projectOcrApi.listProjectDocumentTypes(projectId)
+			} catch (error) {
+				this.documentTypes = []
+				this.documentTypesError = error?.response?.data?.message || 'Could not load OCR document types.'
+			} finally {
+				this.documentTypesLoading = false
+			}
+		},
+		queueVisibleProcessingLoad() {
+			this.$nextTick(() => {
+				this.preloadVisibleProcessing(this.attachments)
+			})
+		},
+		async preloadVisibleProcessing(entries) {
+			if (!this.canUseOcr) {
+				return
+			}
+
+			const projectId = Number(this.projectId)
+			if (!Number.isFinite(projectId) || projectId <= 0) {
+				return
+			}
+
+			for (const entry of Array.isArray(entries) ? entries : []) {
+				if (!this.showOcrForAttachment(entry)) {
+					continue
+				}
+
+				const fileId = this.attachmentFileId(entry)
+				const key = String(fileId)
+				if (Object.prototype.hasOwnProperty.call(this.processingByFileId, key) || this.processingLoadingByFileId[key]) {
+					continue
+				}
+
+				await this.loadFileProcessing(fileId)
+			}
+		},
+		async loadFileProcessing(fileId) {
+			const projectId = Number(this.projectId)
+			const normalizedFileId = Number(fileId)
+			if (!Number.isFinite(projectId) || projectId <= 0 || !Number.isFinite(normalizedFileId) || normalizedFileId <= 0) {
+				return
+			}
+
+			const key = String(normalizedFileId)
+			this.$set(this.processingLoadingByFileId, key, true)
+			try {
+				const payload = await projectOcrApi.getFileProcessing(projectId, normalizedFileId)
+				if (payload?.processing) {
+					this.$set(this.processingByFileId, key, payload.processing)
+				}
+			} catch (error) {
+				this.$set(this.feedbackByFileId, key, error?.response?.data?.message || 'Could not load OCR status.')
+			} finally {
+				this.$set(this.processingLoadingByFileId, key, false)
+			}
+		},
+		documentTypeValue(fileId) {
+			const record = this.processingByFileId[String(fileId)] || null
+			return record?.document_type_id || ''
+		},
+		statusLabel(fileId) {
+			const record = this.processingByFileId[String(fileId)] || null
+			if (!record) {
+				return 'Unassigned'
+			}
+			if (record.ocr_status === 'failed') {
+				return 'Failed'
+			}
+			if (record.ocr_status === 'stale') {
+				return 'Stale'
+			}
+			if (record.ocr_status === 'processing') {
+				return 'Processing'
+			}
+			if (record.ocr_status === 'done') {
+				if (this.hasPartialExtraction(fileId)) {
+					const missingCount = this.missingFieldsCount(fileId)
+					return missingCount > 0 ? `Partial (${missingCount} missing)` : 'Partial'
+				}
+				return 'Ready'
+			}
+			return 'Queued'
+		},
+		statusTooltip(fileId) {
+			const label = this.statusLabel(fileId)
+			const feedback = this.fileFeedback(fileId)
+			if (!feedback) {
+				return label
+			}
+			return `${label} - ${feedback}`
+		},
+		isProcessingBusy(fileId) {
+			const key = String(fileId)
+			return !!(this.processingLoadingByFileId[key] || this.assigningByFileId[key])
+		},
+		fileFeedback(fileId) {
+			return this.feedbackByFileId[String(fileId)] || ''
+		},
+		extractedEntries(fileId, includeEmpty = false) {
+			const record = this.processingByFileId[String(fileId)] || null
+			const extracted = record?.extracted && typeof record.extracted === 'object' ? record.extracted : {}
+			const entriesByKey = {}
+			const ordered = []
+			for (const name of this.expectedFieldNames(fileId)) {
+				if (!entriesByKey[name]) {
+					const payload = extracted[name] && typeof extracted[name] === 'object' ? extracted[name] : {}
+					const value = payload.value ?? null
+					entriesByKey[name] = {
+						key: name,
+						name,
+						value,
+						missing: value === null || String(value).trim() === '',
+					}
+					ordered.push(entriesByKey[name])
+				}
+			}
+
+			for (const [key, payload] of Object.entries(extracted)) {
+				const value = payload && typeof payload === 'object' ? payload.value : null
+				const name = payload && typeof payload === 'object' ? (payload.name || payload.label || key) : key
+				if (!entriesByKey[key]) {
+					entriesByKey[key] = {
+						key,
+						name,
+						value,
+						missing: value === null || String(value).trim() === '',
+					}
+					ordered.push(entriesByKey[key])
+				}
+			}
+
+			if (includeEmpty) {
+				return ordered
+			}
+
+			return ordered.filter((item) => !item.missing)
+		},
+		expectedFieldNames(fileId) {
+			const record = this.processingByFileId[String(fileId)] || null
+			const documentTypeId = Number(record?.document_type_id ?? 0)
+			if (!Number.isFinite(documentTypeId) || documentTypeId <= 0) {
+				return []
+			}
+
+			const documentType = this.documentTypes.find((type) => Number(type?.id) === documentTypeId) || null
+			const fields = Array.isArray(documentType?.fields) ? documentType.fields : []
+			return fields
+				.map((field) => {
+					if (typeof field === 'string') {
+						return field.trim()
+					}
+					const normalized = field && typeof field === 'object' ? field : {}
+					return String(normalized?.name || normalized?.label || normalized?.key || '').trim()
+				})
+				.filter((name) => name !== '')
+		},
+		missingFieldsCount(fileId) {
+			return this.extractedEntries(fileId, true).filter((item) => item.missing).length
+		},
+		hasPartialExtraction(fileId) {
+			const record = this.processingByFileId[String(fileId)] || null
+			if (!record || record.ocr_status !== 'done') {
+				return false
+			}
+			const entries = this.extractedEntries(fileId, true)
+			if (entries.length === 0) {
+				return false
+			}
+			const filled = entries.filter((item) => !item.missing).length
+			const missing = entries.length - filled
+			return filled > 0 && missing > 0
+		},
+		isAssigning(fileId) {
+			return !!this.assigningByFileId[String(fileId)]
+		},
+		statusIcon(fileId) {
+			const record = this.processingByFileId[String(fileId)] || null
+			if (!record) {
+				return 'FileQuestionOutline'
+			}
+			if (record.ocr_status === 'failed') {
+				return 'AlertCircleOutline'
+			}
+			if (record.ocr_status === 'stale') {
+				return 'ClockOutline'
+			}
+			if (record.ocr_status === 'processing') {
+				return 'Sync'
+			}
+			if (record.ocr_status === 'done') {
+				if (this.hasPartialExtraction(fileId)) {
+					return 'AlertCircleOutline'
+				}
+				return 'CheckCircleOutline'
+			}
+			return 'ClockOutline'
+		},
+		statusBadgeClass(fileId) {
+			const record = this.processingByFileId[String(fileId)] || null
+			if (!record) return 'attachment__ocr-status--muted'
+			if (record.ocr_status === 'failed') return 'attachment__ocr-status--error'
+			if (record.ocr_status === 'done' && this.hasPartialExtraction(fileId)) return 'attachment__ocr-status--partial'
+			if (record.ocr_status === 'done') return 'attachment__ocr-status--success'
+			if (record.ocr_status === 'processing') return 'attachment__ocr-status--spin'
+			return 'attachment__ocr-status--pending'
+		},
+		setProcessingResult(fileId, payload, successMessage, queuedMessage) {
+			const key = String(fileId)
+			if (payload?.processing) {
+				this.$set(this.processingByFileId, key, payload.processing)
+			}
+
+			const nextStatus = this.statusLabel(fileId)
+			if (nextStatus.startsWith('Partial')) {
+				return 'Document processed with missing fields.'
+			}
+			if (nextStatus === 'Ready') {
+				return successMessage
+			}
+			if (nextStatus === 'Failed') {
+				return payload?.processing?.error_message || 'OCR processing failed.'
+			}
+			return queuedMessage
+		},
+		canReprocess(fileId) {
+			const record = this.processingByFileId[String(fileId)] || null
+			if (!record || !record.document_type_id) {
+				return false
+			}
+			if (this.isProcessingBusy(fileId)) {
+				return false
+			}
+			return record.ocr_status !== 'processing'
+		},
+		canOpenExtractedDataModal(fileId) {
+			const record = this.processingByFileId[String(fileId)] || null
+			return !!(record && record.document_type_id)
+		},
+		setActiveExtractedDraft(fieldName, value) {
+			this.$set(this.activeExtractedDraft, fieldName, String(value ?? ''))
+		},
+		isSavingExtracted(fileId) {
+			return String(this.savingExtractedFileId || '') === String(fileId || '')
+		},
+		async assignDocumentType(attachment, documentTypeId) {
+			if (!this.showOcrForAttachment(attachment)) {
+				return
+			}
+
+			const projectId = Number(this.projectId)
+			const fileId = this.attachmentFileId(attachment)
+			const normalizedDocumentTypeId = Number(documentTypeId)
+			if (!Number.isFinite(projectId) || projectId <= 0 || fileId <= 0 || !Number.isFinite(normalizedDocumentTypeId) || normalizedDocumentTypeId <= 0) {
+				return
+			}
+
+			const key = String(fileId)
+			this.$set(this.assigningByFileId, key, true)
+			this.$delete(this.feedbackByFileId, key)
+			try {
+				const payload = await projectOcrApi.assignFileDocumentType(projectId, fileId, normalizedDocumentTypeId)
+				const message = this.setProcessingResult(
+					fileId,
+					payload,
+					'Document processed successfully.',
+					'Document type assigned. OCR is queued.',
+				)
+				this.$set(this.feedbackByFileId, key, message)
+			} catch (error) {
+				this.$set(this.feedbackByFileId, key, error?.response?.data?.message || 'Could not assign document type.')
+			} finally {
+				this.$set(this.assigningByFileId, key, false)
+			}
+		},
+		async reprocessAttachment(attachment) {
+			if (!this.showOcrForAttachment(attachment)) {
+				return
+			}
+
+			const projectId = Number(this.projectId)
+			const fileId = this.attachmentFileId(attachment)
+			if (!Number.isFinite(projectId) || projectId <= 0 || fileId <= 0) {
+				return
+			}
+
+			const key = String(fileId)
+			this.$set(this.assigningByFileId, key, true)
+			this.$delete(this.feedbackByFileId, key)
+			try {
+				const payload = await projectOcrApi.reprocessFileProcessing(projectId, fileId)
+				const message = this.setProcessingResult(
+					fileId,
+					payload,
+					'Document reprocessed successfully.',
+					'Document reprocessing is queued.',
+				)
+				this.$set(this.feedbackByFileId, key, message)
+			} catch (error) {
+				this.$set(this.feedbackByFileId, key, error?.response?.data?.message || 'Could not reprocess OCR for this file.')
+			} finally {
+				this.$set(this.assigningByFileId, key, false)
+			}
+		},
+		openExtractedDataModal(fileId) {
+			this.activeExtractedFileId = Number(fileId)
+			const draft = {}
+			for (const item of this.extractedEntries(fileId, true)) {
+				draft[item.key] = item.value === null || item.value === undefined ? '' : String(item.value)
+			}
+			this.activeExtractedDraft = draft
+		},
+		closeExtractedDataModal() {
+			this.activeExtractedFileId = null
+			this.activeExtractedDraft = {}
+			this.savingExtractedFileId = null
+		},
+		async saveActiveExtractedData() {
+			const projectId = Number(this.projectId)
+			const fileId = Number(this.activeExtractedFileId)
+			if (!Number.isFinite(projectId) || projectId <= 0 || !Number.isFinite(fileId) || fileId <= 0) {
+				return
+			}
+
+			this.savingExtractedFileId = fileId
+			const key = String(fileId)
+			this.$delete(this.feedbackByFileId, key)
+			try {
+				const payload = await projectOcrApi.updateFileExtractedFields(projectId, fileId, this.activeExtractedDraft)
+				if (payload?.processing) {
+					this.$set(this.processingByFileId, key, payload.processing)
+				}
+				this.$set(this.feedbackByFileId, key, 'Extracted fields saved.')
+			} catch (error) {
+				this.$set(this.feedbackByFileId, key, error?.response?.data?.message || 'Could not save extracted fields.')
+			} finally {
+				this.savingExtractedFileId = null
+			}
+		},
 		handleUploadFile(event) {
 			const files = event.target.files ?? []
 			for (const file of files) {
@@ -304,6 +899,7 @@ export default {
 
 		li.attachment {
 			display: flex;
+			align-items: flex-start;
 			padding: 3px;
 			min-height: var(--default-clickable-area);
 
@@ -358,6 +954,176 @@ export default {
 			progress {
 				margin-top: 3px;
 			}
+		}
+	}
+
+	.attachment__ocr {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		margin-top: 6px;
+		min-height: 28px;
+	}
+
+	.attachment__ocr-select {
+		border: 1px solid var(--color-border-dark);
+		border-radius: 6px;
+		background: var(--color-main-background);
+		color: var(--color-main-text);
+		font-size: 12px;
+		padding: 4px 6px;
+		max-width: 170px;
+	}
+
+	.attachment__ocr-status {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		border-radius: 999px;
+		border: 1px solid transparent;
+	}
+
+	.attachment__ocr-status--muted {
+		background: var(--color-background-dark);
+		color: var(--color-text-maxcontrast);
+		border-color: var(--color-border);
+	}
+
+	.attachment__ocr-status--pending {
+		background: rgba(255, 184, 0, 0.12);
+		color: #a06700;
+		border-color: rgba(255, 184, 0, 0.35);
+	}
+
+	.attachment__ocr-status--success {
+		background: rgba(0, 128, 0, 0.1);
+		color: #0a7a23;
+		border-color: rgba(0, 128, 0, 0.25);
+	}
+
+	.attachment__ocr-status--partial {
+		background: rgba(255, 184, 0, 0.12);
+		color: #a06700;
+		border-color: rgba(255, 184, 0, 0.35);
+	}
+
+	.attachment__ocr-status--error {
+		background: rgba(255, 0, 0, 0.1);
+		color: #c63131;
+		border-color: rgba(255, 0, 0, 0.25);
+	}
+
+	.attachment__ocr-status--spin {
+		background: rgba(0, 124, 255, 0.1);
+		color: #0f5cb8;
+		border-color: rgba(0, 124, 255, 0.25);
+	}
+
+	.attachment__ocr-status--spin :deep(svg) {
+		animation: attachment-ocr-spin 1.2s linear infinite;
+	}
+
+	.attachment__ocr-icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border: 1px solid var(--color-border-dark);
+		border-radius: 6px;
+		background: var(--color-main-background);
+		color: var(--color-main-text);
+		cursor: pointer;
+		padding: 0;
+	}
+
+	.attachment__ocr-icon-btn:hover {
+		background: var(--color-background-hover);
+	}
+
+	.attachment__ocr-loading {
+		display: inline-flex;
+		align-items: center;
+	}
+
+	.attachment__ocr-modal {
+		padding: 8px;
+	}
+
+	.attachment__ocr-modal-filename {
+		font-weight: 600;
+		margin-bottom: 10px;
+	}
+
+	.attachment__ocr-empty {
+		font-size: 13px;
+		color: var(--color-text-maxcontrast);
+	}
+
+	.attachment__ocr-warning {
+		margin-bottom: 10px;
+		padding: 8px 10px;
+		font-size: 13px;
+		border-radius: 6px;
+		background: rgba(255, 184, 0, 0.12);
+		color: #a06700;
+		border: 1px solid rgba(255, 184, 0, 0.35);
+	}
+
+	.attachment__ocr-table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.attachment__ocr-table th,
+	.attachment__ocr-table td {
+		font-size: 13px;
+		padding: 8px;
+		text-align: left;
+		border-bottom: 1px solid var(--color-border);
+		vertical-align: top;
+	}
+
+	.attachment__ocr-table th {
+		width: 35%;
+		font-weight: 600;
+	}
+
+	.attachment__ocr-missing-pill {
+		display: inline-flex;
+		margin-left: 8px;
+		padding: 2px 6px;
+		font-size: 11px;
+		border-radius: 999px;
+		background: rgba(255, 184, 0, 0.12);
+		color: #a06700;
+		border: 1px solid rgba(255, 184, 0, 0.35);
+	}
+
+	.attachment__ocr-input {
+		width: 100%;
+		border: 1px solid var(--color-border);
+		background: var(--color-main-background);
+		color: var(--color-main-text);
+		border-radius: 6px;
+		padding: 7px 9px;
+		font-size: 13px;
+	}
+
+	.attachment__ocr-actions {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: 10px;
+	}
+
+	@keyframes attachment-ocr-spin {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
 		}
 	}
 
