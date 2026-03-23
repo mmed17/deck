@@ -166,10 +166,11 @@ class CardPermissionTemplateService {
 			];
 		}, (array) ($policyState['roles'] ?? []));
 
-		$defaults = (array) ($policyState['defaultRoleKeys'] ?? ['move' => [], 'approve' => [], 'view' => []]);
+		$defaults = (array) ($policyState['defaultRoleKeys'] ?? ['move' => [], 'sign' => [], 'verify' => [], 'view' => []]);
 		$defaults = [
 			'move' => array_values(array_unique((array) ($defaults['move'] ?? []))),
-			'approve' => array_values(array_unique((array) ($defaults['approve'] ?? []))),
+			'sign' => array_values(array_unique((array) ($defaults['sign'] ?? []))),
+			'verify' => array_values(array_unique((array) ($defaults['verify'] ?? []))),
 			'view' => array_values(array_unique((array) ($defaults['view'] ?? []))),
 		];
 
@@ -182,7 +183,7 @@ class CardPermissionTemplateService {
 			if ($cardId <= 0 || $title === '') {
 				continue;
 			}
-			$policy = $explicitPolicies[$cardId] ?? ['move' => [], 'approve' => [], 'view' => []];
+			$policy = $explicitPolicies[$cardId] ?? ['move' => [], 'sign' => [], 'verify' => [], 'view' => []];
 			$cardsOut[] = [
 				'title' => $title,
 				'description' => (string) ($c['description'] ?? ''),
@@ -191,7 +192,8 @@ class CardPermissionTemplateService {
 				'order' => (int) ($c['card_order'] ?? 0),
 				'policy' => [
 					'move' => array_values(array_unique((array) ($policy['move'] ?? []))),
-					'approve' => array_values(array_unique((array) ($policy['approve'] ?? []))),
+					'sign' => array_values(array_unique((array) ($policy['sign'] ?? []))),
+					'verify' => array_values(array_unique((array) ($policy['verify'] ?? []))),
 					'view' => array_values(array_unique((array) ($policy['view'] ?? []))),
 				],
 			];

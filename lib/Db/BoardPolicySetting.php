@@ -18,6 +18,8 @@ use DateTime;
  * @method void setPermissionMode(string $permissionMode)
  * @method int|null getApprovedStackId()
  * @method void setApprovedStackId(?int $approvedStackId)
+ * @method int|null getDoneStackId()
+ * @method void setDoneStackId(?int $doneStackId)
  * @method DateTime getCreatedAt()
  * @method void setCreatedAt(DateTime $createdAt)
  * @method DateTime|null getUpdatedAt()
@@ -31,6 +33,7 @@ class BoardPolicySetting extends RelationalEntity
 	protected $boardId;
 	protected $permissionMode;
 	protected $approvedStackId;
+	protected $doneStackId;
 	protected $createdAt;
 	protected $updatedAt;
 
@@ -39,6 +42,7 @@ class BoardPolicySetting extends RelationalEntity
 		$this->addType('id', 'integer');
 		$this->addType('boardId', 'integer');
 		$this->addType('approvedStackId', 'integer');
+		$this->addType('doneStackId', 'integer');
 		$this->addType('createdAt', 'datetime');
 		$this->addType('updatedAt', 'datetime');
 	}

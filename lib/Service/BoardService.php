@@ -233,10 +233,12 @@ class BoardService
 			$this->l10n->t('Next Priority'),
 			$this->l10n->t('In Progress'),
 			$this->l10n->t('To Review'),
-			$this->l10n->t('Approved/Done')
+			$this->l10n->t('Approved'),
+			$this->l10n->t('Done'),
 		];
 		$stacks = [];
 		$approvedStackId = null;
+		$doneStackId = null;
 		foreach ($default_stacks as $index => $stackTitle) {
 			$stack = new Stack();
 			$stack->setTitle($stackTitle);
@@ -244,17 +246,23 @@ class BoardService
 			$stack->setBoardId($new_board->getId());
 			$stack = $this->stackMapper->insert($stack);
 			$stacks[] = $stack;
-			if ($index === count($default_stacks) - 1) {
+			if ($stackTitle === $this->l10n->t('Approved')) {
 				$approvedStackId = (int) $stack->getId();
+			}
+			if ($stackTitle === $this->l10n->t('Done')) {
+				$doneStackId = (int) $stack->getId();
 			}
 		}
 
 		$new_board->setStacks($stacks);
 
 		// Persist approved stack ID (stack reorder safe).
-		if ($approvedStackId !== null && $approvedStackId > 0) {
+		if (
+			$approvedStackId !== null && $approvedStackId > 0
+			&& $doneStackId !== null && $doneStackId > 0
+		) {
 			try {
-				$this->cardPolicyService->ensureBoardSettings((int) $new_board->getId(), $approvedStackId);
+				$this->cardPolicyService->ensureBoardSettings((int) $new_board->getId(), $approvedStackId, $doneStackId);
 			} catch (\Throwable $e) {
 				// Board creation must not fail because of policy settings.
 			}

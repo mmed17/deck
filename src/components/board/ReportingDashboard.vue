@@ -188,13 +188,13 @@ export default {
         getCardStack(card) {
             return this.stacks.find(s => s.id === card.stackId) || null
         },
-        isCardDone(card) {
-            if (card.done !== null) return true
-            const stack = this.getCardStack(card)
-            if (!stack) return false
-            const doneStackNames = ['Done', 'Approved/Done', 'Approved / Done']
-            return doneStackNames.includes(stack.title)
-        },
+	        isCardDone(card) {
+	            if (card.done !== null) return true
+	            const stack = this.getCardStack(card)
+	            if (!stack) return false
+	            const doneStackNames = ['done', 'approved/done', 'approved / done', 'afgerond', 'gereed']
+	            return doneStackNames.includes(String(stack.title || '').trim().toLowerCase())
+	        },
         isCardOpen(card) {
             if (card.archived === true) return false
             return !this.isCardDone(card)

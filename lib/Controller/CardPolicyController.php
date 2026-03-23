@@ -37,10 +37,10 @@ class CardPolicyController extends OCSController
 	 */
 	public function index(int $boardId): DataResponse
 	{
-		try {
-			$state = $this->cardPolicyService->getBoardPolicyState($boardId);
-			$explicit = $this->cardPolicyService->getExplicitCardPoliciesByBoard($boardId);
-			$defaults = $state['defaultRoleKeys'] ?? ['move' => [], 'approve' => [], 'view' => []];
+			try {
+				$state = $this->cardPolicyService->getBoardPolicyState($boardId);
+				$explicit = $this->cardPolicyService->getExplicitCardPoliciesByBoard($boardId);
+				$defaults = $state['defaultRoleKeys'] ?? ['move' => [], 'sign' => [], 'verify' => [], 'view' => []];
 
 			// Cards (raw query: QBMapper::findEntities is protected)
 			$cardsQb = $this->cardMapper->queryCardsByBoard($boardId);
@@ -54,31 +54,34 @@ class CardPolicyController extends OCSController
 				if ($cardId <= 0) {
 					continue;
 				}
-				$explicitPolicy = $explicit[$cardId] ?? null;
-				$effectiveMove = $explicitPolicy['move'] ?? ($defaults['move'] ?? []);
-				$effectiveApprove = $explicitPolicy['approve'] ?? ($defaults['approve'] ?? []);
-				$explicitView = $explicitPolicy['view'] ?? [];
-				$defaultView = $defaults['view'] ?? [];
-				$effectiveView = $explicitView !== []
-					? $explicitView
-					: ($defaultView !== [] ? $defaultView : array_values(array_unique(array_merge($effectiveMove, $effectiveApprove))));
+					$explicitPolicy = $explicit[$cardId] ?? null;
+					$effectiveMove = $explicitPolicy['move'] ?? ($defaults['move'] ?? []);
+					$effectiveSign = $explicitPolicy['sign'] ?? ($defaults['sign'] ?? []);
+					$effectiveVerify = $explicitPolicy['verify'] ?? ($defaults['verify'] ?? []);
+					$explicitView = $explicitPolicy['view'] ?? [];
+					$defaultView = $defaults['view'] ?? [];
+					$effectiveView = $explicitView !== []
+						? $explicitView
+						: ($defaultView !== [] ? $defaultView : array_values(array_unique(array_merge($effectiveMove, $effectiveSign, $effectiveVerify))));
 				$cardItems[] = [
 					'id' => $cardId,
 					'title' => (string) ($row['title'] ?? ''),
 					'stackId' => (int) ($row['stack_id'] ?? 0),
 					'done' => isset($row['done']) && $row['done'] instanceof \DateTimeInterface ? $row['done']->format(DATE_ATOM) : (is_string($row['done'] ?? null) ? (string) $row['done'] : null),
-					'hasExplicitPolicy' => $explicitPolicy !== null,
-					'policy' => [
-						'move' => $explicitPolicy['move'] ?? [],
-						'approve' => $explicitPolicy['approve'] ?? [],
-						'view' => $explicitPolicy['view'] ?? [],
-					],
-					'effectivePolicy' => [
-						'move' => $effectiveMove,
-						'approve' => $effectiveApprove,
-						'view' => $effectiveView,
-					],
-				];
+						'hasExplicitPolicy' => $explicitPolicy !== null,
+						'policy' => [
+							'move' => $explicitPolicy['move'] ?? [],
+							'sign' => $explicitPolicy['sign'] ?? [],
+							'verify' => $explicitPolicy['verify'] ?? [],
+							'view' => $explicitPolicy['view'] ?? [],
+						],
+						'effectivePolicy' => [
+							'move' => $effectiveMove,
+							'sign' => $effectiveSign,
+							'verify' => $effectiveVerify,
+							'view' => $effectiveView,
+						],
+					];
 			}
 			$result->closeCursor();
 
@@ -111,11 +114,14 @@ class CardPolicyController extends OCSController
 	/**
 	 * @NoAdminRequired
 	 */
-	public function updateSettings(int $boardId, ?int $approvedStackId = null): DataResponse
+	public function updateSettings(int $boardId, ?int $approvedStackId = null, ?int $doneStackId = null): DataResponse
 	{
 		try {
 			if ($approvedStackId !== null) {
 				$this->cardPolicyService->setApprovedStackId($boardId, $approvedStackId);
+			}
+			if ($doneStackId !== null) {
+				$this->cardPolicyService->setDoneStackId($boardId, $doneStackId);
 			}
 			return new DataResponse(['success' => true]);
 		} catch (NoPermissionException $e) {
@@ -131,10 +137,19 @@ class CardPolicyController extends OCSController
 	/**
 	 * @NoAdminRequired
 	 */
-	public function updateDefaults(int $boardId, array $move = [], array $approve = [], array $view = []): DataResponse
+	public function updateDefaults(
+		int $boardId,
+		array $move = [],
+		array $sign = [],
+		array $verify = [],
+		array $approve = [],
+		array $view = []
+	): DataResponse
 	{
 		try {
-			$this->cardPolicyService->setBoardDefaultRolesByKeys($boardId, $move, $approve, $view);
+			$signFinal = $sign !== [] ? $sign : $approve;
+			$verifyFinal = $verify !== [] ? $verify : $approve;
+			$this->cardPolicyService->setBoardDefaultRolesByKeys($boardId, $move, $signFinal, $verifyFinal, $view);
 			return new DataResponse(['success' => true]);
 		} catch (NoPermissionException $e) {
 			return new DataResponse(['message' => $e->getMessage()], Http::STATUS_FORBIDDEN);
@@ -149,10 +164,20 @@ class CardPolicyController extends OCSController
 	/**
 	 * @NoAdminRequired
 	 */
-	public function setCardPolicy(int $boardId, int $cardId, array $move = [], array $approve = [], array $view = []): DataResponse
+	public function setCardPolicy(
+		int $boardId,
+		int $cardId,
+		array $move = [],
+		array $sign = [],
+		array $verify = [],
+		array $approve = [],
+		array $view = []
+	): DataResponse
 	{
 		try {
-			$this->cardPolicyService->setCardPolicyByRoleKeys($boardId, $cardId, $move, $approve, $view);
+			$signFinal = $sign !== [] ? $sign : $approve;
+			$verifyFinal = $verify !== [] ? $verify : $approve;
+			$this->cardPolicyService->setCardPolicyByRoleKeys($boardId, $cardId, $move, $signFinal, $verifyFinal, $view);
 			return new DataResponse(['success' => true], Http::STATUS_OK);
 		} catch (NoPermissionException $e) {
 			return new DataResponse(['message' => $e->getMessage()], Http::STATUS_FORBIDDEN);

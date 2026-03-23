@@ -263,7 +263,9 @@ export default {
 				'Next Priority': '#8b5cf6',     // Purple
 				'In Progress': '#3b82f6',       // Blue
 				'To Review': '#f59e0b',         // Amber
-				'Approved/Done': '#10b981',     // Emerald
+				'Approved': '#14b8a6',          // Teal
+				'Done': '#10b981',              // Emerald
+				'Approved/Done': '#10b981',     // Legacy
 				// Fallback legacy names
 				'To do': '#64748b',
 				'Doing': '#3b82f6',
@@ -691,4 +693,3 @@ Z
 	}
 
 </style>
-

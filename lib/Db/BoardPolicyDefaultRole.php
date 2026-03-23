@@ -20,6 +20,9 @@ namespace OCA\Deck\Db;
 class BoardPolicyDefaultRole extends RelationalEntity
 {
 	public const ACTION_MOVE = 'move';
+	public const ACTION_SIGN = 'sign';
+	public const ACTION_VERIFY = 'verify';
+	// Legacy alias kept for backward-compat parsing/migration paths.
 	public const ACTION_APPROVE = 'approve';
 
 	protected $boardId;

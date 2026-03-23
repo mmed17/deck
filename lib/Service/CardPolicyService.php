@@ -20,10 +20,12 @@ use OCA\Deck\Db\BoardPolicyRoleMembership;
 use OCA\Deck\Db\BoardPolicyRoleMembershipMapper;
 use OCA\Deck\Db\BoardPolicySetting;
 use OCA\Deck\Db\BoardPolicySettingMapper;
+use OCA\Deck\Db\CardMapper;
 use OCA\Deck\Db\CardPolicy;
 use OCA\Deck\Db\CardPolicyMapper;
 use OCA\Deck\Db\CardPolicyRole;
 use OCA\Deck\Db\CardPolicyRoleMapper;
+use OCA\Deck\Db\Stack;
 use OCA\Deck\Db\StackMapper;
 use OCA\Deck\NoPermissionException;
 use OCA\Deck\Notification\NotificationHelper;
@@ -35,6 +37,9 @@ use Psr\Log\LoggerInterface;
 class CardPolicyService
 {
 	public const ACTION_MOVE = BoardPolicyDefaultRole::ACTION_MOVE;
+	public const ACTION_SIGN = BoardPolicyDefaultRole::ACTION_SIGN;
+	public const ACTION_VERIFY = BoardPolicyDefaultRole::ACTION_VERIFY;
+	// Legacy alias; treated as verify+sign where relevant.
 	public const ACTION_APPROVE = BoardPolicyDefaultRole::ACTION_APPROVE;
 	// Future: separate action for visibility (not wired to UI yet)
 	public const ACTION_VIEW = 'view';
@@ -64,6 +69,7 @@ class CardPolicyService
 		private readonly BoardPolicyDefaultRoleMapper $defaultRoleMapper,
 		private readonly CardPolicyMapper $cardPolicyMapper,
 		private readonly CardPolicyRoleMapper $cardPolicyRoleMapper,
+		private readonly CardMapper $cardMapper,
 		private readonly StackMapper $stackMapper,
 		private readonly PermissionService $permissionService,
 		private readonly NotificationHelper $notificationHelper,
@@ -84,8 +90,8 @@ class CardPolicyService
 	/**
 	 * Card visibility for card-policy boards.
 	 *
-	 * For now visibility is derived from roles configured for move/approve:
-	 * - users can see a card if they match ANY role that is allowed to move OR approve the card
+	 * For now visibility is derived from roles configured for move/sign/verify:
+	 * - users can see a card if they match ANY role that is allowed to move OR sign OR verify the card
 	 * - board owners / board managers / project owner / organization admins can see everything
 	 */
 	public function assertUserAllowedToViewCard(int $boardId, int $cardId, ?string $userId = null): void
@@ -106,14 +112,15 @@ class CardPolicyService
 
 		$explicitViewRoleIds = $this->getExplicitRoleIdsForCardAndAction($boardId, $cardId, self::ACTION_VIEW);
 		$defaultViewRoleIds = $this->getDefaultRoleIdsForAction($boardId, self::ACTION_VIEW);
-		$allowedRoleIds = $explicitViewRoleIds !== []
-			? $explicitViewRoleIds
-			: ($defaultViewRoleIds !== []
-				? $defaultViewRoleIds
-				: array_values(array_unique(array_merge(
-					$this->getEffectiveRoleIdsForCard($boardId, $cardId, self::ACTION_MOVE),
-					$this->getEffectiveRoleIdsForCard($boardId, $cardId, self::ACTION_APPROVE),
-				))));
+			$allowedRoleIds = $explicitViewRoleIds !== []
+				? $explicitViewRoleIds
+				: ($defaultViewRoleIds !== []
+					? $defaultViewRoleIds
+					: array_values(array_unique(array_merge(
+						$this->getEffectiveRoleIdsForCard($boardId, $cardId, self::ACTION_MOVE),
+						$this->getEffectiveRoleIdsForCard($boardId, $cardId, self::ACTION_SIGN),
+						$this->getEffectiveRoleIdsForCard($boardId, $cardId, self::ACTION_VERIFY),
+					))));
 		$allowedRoleIds = array_values(array_filter($allowedRoleIds, static fn (int $id) => $id > 0));
 		if ($allowedRoleIds === []) {
 			throw new NoPermissionException('Permission denied');
@@ -189,7 +196,7 @@ class CardPolicyService
 			return [];
 		}
 
-		$explicitAllowedByCardId = $this->getExplicitRoleIdsForCardsAndActions($boardId, $cardIds, [self::ACTION_MOVE, self::ACTION_APPROVE]);
+			$explicitAllowedByCardId = $this->getExplicitRoleIdsForCardsAndActions($boardId, $cardIds, [self::ACTION_MOVE, self::ACTION_SIGN, self::ACTION_VERIFY]);
 		$explicitViewByCardId = $this->getExplicitRoleIdsForCardsAndActions($boardId, $cardIds, [self::ACTION_VIEW]);
 
 		$out = [];
@@ -252,6 +259,13 @@ class CardPolicyService
 		return $approved !== null ? (int) $approved : null;
 	}
 
+	public function getDoneStackId(int $boardId): ?int
+	{
+		$setting = $this->ensureBoardSettings($boardId);
+		$done = $setting->getDoneStackId();
+		return $done !== null ? (int) $done : null;
+	}
+
 	public function enableCardPolicyMode(int $boardId): void
 	{
 		$this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
@@ -265,13 +279,11 @@ class CardPolicyService
 	}
 
 	/**
-	 * Ensure settings exist and approved_stack_id is persisted.
+	 * Ensure settings exist and stack anchors are persisted.
 	 *
-	 * If approvedStackId is not provided and missing in DB, it is inferred once from current stacks:
-	 * - prefer stack titled "Approved/Done" (exact match)
-	 * - else pick the stack with highest order
+	 * If stack ids are not provided and missing in DB, they are inferred once from current stacks.
 	 */
-	public function ensureBoardSettings(int $boardId, ?int $approvedStackId = null): BoardPolicySetting
+	public function ensureBoardSettings(int $boardId, ?int $approvedStackId = null, ?int $doneStackId = null): BoardPolicySetting
 	{
 		$setting = $this->findSettingOrNull($boardId);
 		$now = new DateTime('now');
@@ -283,17 +295,30 @@ class CardPolicyService
 			$setting->setCreatedAt($now);
 			$setting->setUpdatedAt(null);
 			$setting->setApprovedStackId(null);
+			$setting->setDoneStackId(null);
 			$setting = $this->settingMapper->insert($setting);
 		}
 
+		$hasExplicitUpdate = false;
 		if ($approvedStackId !== null) {
 			$setting->setApprovedStackId($approvedStackId);
+			$hasExplicitUpdate = true;
+		}
+		if ($doneStackId !== null) {
+			$setting->setDoneStackId($doneStackId);
+			$hasExplicitUpdate = true;
+		}
+		if ($hasExplicitUpdate) {
 			$setting->setUpdatedAt($now);
 			return $this->settingMapper->update($setting);
 		}
 
-		if ($setting->getApprovedStackId() !== null) {
-			return $setting;
+		if ($setting->getApprovedStackId() !== null && $setting->getDoneStackId() !== null) {
+			$approvedId = (int) $setting->getApprovedStackId();
+			$doneId = (int) $setting->getDoneStackId();
+			if ($approvedId > 0 && $doneId > 0 && $approvedId !== $doneId) {
+				return $setting;
+			}
 		}
 
 		try {
@@ -306,28 +331,212 @@ class CardPolicyService
 			return $setting;
 		}
 
-		$approvedId = null;
+		$approvedId = $setting->getApprovedStackId() !== null ? (int) $setting->getApprovedStackId() : null;
+		$doneId = $setting->getDoneStackId() !== null ? (int) $setting->getDoneStackId() : null;
 		$maxOrder = null;
+		$maxOrderStackId = null;
+		$approvedDoneId = null;
 		foreach ($stacks as $stack) {
-			$title = (string) ($stack->getTitle() ?? '');
+			$title = trim((string) ($stack->getTitle() ?? ''));
+			$normalizedTitle = mb_strtolower($title);
 			$order = (int) ($stack->getOrder() ?? -1);
-			if ($title === 'Approved/Done') {
-				$approvedId = (int) $stack->getId();
-				break;
+			$stackId = (int) $stack->getId();
+			if ($normalizedTitle === 'approved') {
+				$approvedId = $stackId;
+			}
+			if (in_array($normalizedTitle, ['done', 'afgerond', 'gereed'], true)) {
+				$doneId = $stackId;
+			}
+			if ($normalizedTitle === 'approved/done') {
+				$approvedDoneId = $stackId;
 			}
 			if ($maxOrder === null || $order > $maxOrder) {
 				$maxOrder = $order;
-				$approvedId = (int) $stack->getId();
+				$maxOrderStackId = $stackId;
 			}
 		}
 
+		if (($approvedId === null || $approvedId <= 0) && $approvedDoneId !== null && $approvedDoneId > 0) {
+			$approvedId = $approvedDoneId;
+		}
+		if (($doneId === null || $doneId <= 0) && $approvedDoneId !== null && $approvedDoneId > 0) {
+			$doneId = $approvedDoneId;
+		}
+		if (($approvedId === null || $approvedId <= 0) && $maxOrderStackId !== null && $maxOrderStackId > 0) {
+			$approvedId = $maxOrderStackId;
+		}
+		if (($doneId === null || $doneId <= 0) && $maxOrderStackId !== null && $maxOrderStackId > 0) {
+			$doneId = $maxOrderStackId;
+		}
+
 		if ($approvedId !== null && $approvedId > 0) {
-			$setting->setApprovedStackId($approvedId);
+			$setting->setApprovedStackId((int) $approvedId);
+		}
+		if ($doneId !== null && $doneId > 0) {
+			$setting->setDoneStackId((int) $doneId);
+		}
+		if (
+			($setting->getApprovedStackId() !== null && (int) $setting->getApprovedStackId() > 0)
+			|| ($setting->getDoneStackId() !== null && (int) $setting->getDoneStackId() > 0)
+		) {
 			$setting->setUpdatedAt($now);
 			$setting = $this->settingMapper->update($setting);
 		}
 
+		return $this->ensureLegacyCombinedStackSplit($boardId, $setting, $stacks, $now);
+	}
+
+	/**
+	 * Legacy migration helper:
+	 * split old combined "Approved/Done" stack into separate "Approved" + "Done".
+	 *
+	 * Done cards are moved to the new Done stack and both stack anchors are updated.
+	 *
+	 * @param array<int, object> $stacks
+	 */
+	private function ensureLegacyCombinedStackSplit(int $boardId, BoardPolicySetting $setting, array $stacks, DateTime $now): BoardPolicySetting
+	{
+		$approvedStackId = (int) ($setting->getApprovedStackId() ?? 0);
+		$doneStackId = (int) ($setting->getDoneStackId() ?? 0);
+		if ($approvedStackId <= 0 || $doneStackId <= 0 || $approvedStackId !== $doneStackId) {
+			return $setting;
+		}
+
+		$combinedStack = null;
+		$maxOrder = -1;
+		$existingDoneStack = null;
+		foreach ($stacks as $stack) {
+			$stackId = (int) ($stack->getId() ?? 0);
+			$title = trim((string) ($stack->getTitle() ?? ''));
+			$normalizedTitle = mb_strtolower(preg_replace('/\s+/', '', $title));
+			$order = (int) ($stack->getOrder() ?? 0);
+			if ($order > $maxOrder) {
+				$maxOrder = $order;
+			}
+			if ($stackId === $approvedStackId) {
+				$combinedStack = $stack;
+				continue;
+			}
+			if (in_array($normalizedTitle, ['done', 'afgerond', 'gereed'], true)) {
+				$existingDoneStack = $stack;
+			}
+		}
+
+		if ($combinedStack === null) {
+			return $setting;
+		}
+
+		$combinedTitle = trim((string) ($combinedStack->getTitle() ?? ''));
+		$normalizedCombinedTitle = mb_strtolower(preg_replace('/\s+/', '', $combinedTitle));
+		if (!in_array($normalizedCombinedTitle, ['approved/done', 'approveddone'], true)) {
+			return $setting;
+		}
+
+		$targetDoneStackId = 0;
+		if ($existingDoneStack !== null) {
+			$targetDoneStackId = (int) ($existingDoneStack->getId() ?? 0);
+		}
+
+		if ($targetDoneStackId <= 0) {
+			$doneStack = new Stack();
+			$doneStack->setBoardId($boardId);
+			$doneStack->setTitle('Done');
+			$doneStack->setOrder($maxOrder + 1);
+			$doneStack->setDeletedAt(0);
+			$doneStack->setLastModified(time());
+			$doneStack = $this->stackMapper->insert($doneStack);
+			$targetDoneStackId = (int) ($doneStack->getId() ?? 0);
+		}
+
+		if ($targetDoneStackId <= 0) {
+			return $setting;
+		}
+
+		try {
+			$existingDoneCardCount = \count($this->cardMapper->findAll($targetDoneStackId));
+
+			$qb = $this->db->getQueryBuilder();
+			$qb->select('id')
+				->from('deck_cards')
+				->where($qb->expr()->eq('stack_id', $qb->createNamedParameter($approvedStackId, IQueryBuilder::PARAM_INT)))
+				->andWhere($qb->expr()->isNotNull('done'))
+				->andWhere($qb->expr()->eq('deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
+				->orderBy('order', 'ASC')
+				->addOrderBy('id', 'ASC');
+
+			$result = $qb->executeQuery();
+			$cardIdsToMove = [];
+			while (($row = $result->fetch()) !== false) {
+				$cardId = (int) ($row['id'] ?? 0);
+				if ($cardId > 0) {
+					$cardIdsToMove[] = $cardId;
+				}
+			}
+			$result->closeCursor();
+
+			$nextOrder = $existingDoneCardCount;
+			foreach ($cardIdsToMove as $cardId) {
+				$moveQb = $this->db->getQueryBuilder();
+				$moveQb->update('deck_cards')
+					->set('stack_id', $moveQb->createNamedParameter($targetDoneStackId, IQueryBuilder::PARAM_INT))
+					->set('order', $moveQb->createNamedParameter($nextOrder, IQueryBuilder::PARAM_INT))
+					->set('last_modified', $moveQb->createNamedParameter(time(), IQueryBuilder::PARAM_INT))
+					->where($moveQb->expr()->eq('id', $moveQb->createNamedParameter($cardId, IQueryBuilder::PARAM_INT)));
+				$moveQb->executeStatement();
+				$nextOrder++;
+			}
+
+			$this->reindexActiveCardOrderInStack($approvedStackId);
+			$this->reindexActiveCardOrderInStack($targetDoneStackId);
+		} catch (\Throwable $e) {
+			$this->logger->warning('Card policy settings: unable to split legacy Approved/Done stack', [
+				'exception' => $e,
+				'boardId' => $boardId,
+				'stackId' => $approvedStackId,
+			]);
+			return $setting;
+		}
+
+		$setting->setApprovedStackId($approvedStackId);
+		$setting->setDoneStackId($targetDoneStackId);
+		$setting->setUpdatedAt($now);
+		$setting = $this->settingMapper->update($setting);
+
 		return $setting;
+	}
+
+	private function reindexActiveCardOrderInStack(int $stackId): void
+	{
+		if ($stackId <= 0) {
+			return;
+		}
+
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id')
+			->from('deck_cards')
+			->where($qb->expr()->eq('stack_id', $qb->createNamedParameter($stackId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('deleted_at', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('archived', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
+			->orderBy('order', 'ASC')
+			->addOrderBy('id', 'ASC');
+
+		$result = $qb->executeQuery();
+		$ids = [];
+		while (($row = $result->fetch()) !== false) {
+			$cardId = (int) ($row['id'] ?? 0);
+			if ($cardId > 0) {
+				$ids[] = $cardId;
+			}
+		}
+		$result->closeCursor();
+
+		foreach ($ids as $order => $cardId) {
+			$updateQb = $this->db->getQueryBuilder();
+			$updateQb->update('deck_cards')
+				->set('order', $updateQb->createNamedParameter($order, IQueryBuilder::PARAM_INT))
+				->where($updateQb->expr()->eq('id', $updateQb->createNamedParameter($cardId, IQueryBuilder::PARAM_INT)));
+			$updateQb->executeStatement();
+		}
 	}
 
 	/**
@@ -342,11 +551,12 @@ class CardPolicyService
 		$defaults = $this->defaultRoleMapper->findByBoard($boardId);
 		$defaultRolesByAction = $this->getDefaultRoleKeysByAction($boardId);
 
-		return [
-			'settings' => [
-				'permissionMode' => (string) $setting->getPermissionMode(),
-				'approvedStackId' => $setting->getApprovedStackId() !== null ? (int) $setting->getApprovedStackId() : null,
-			],
+			return [
+				'settings' => [
+					'permissionMode' => (string) $setting->getPermissionMode(),
+					'approvedStackId' => $setting->getApprovedStackId() !== null ? (int) $setting->getApprovedStackId() : null,
+					'doneStackId' => $setting->getDoneStackId() !== null ? (int) $setting->getDoneStackId() : null,
+				],
 			'roles' => array_map(static fn (BoardPolicyRole $r) => $r->jsonSerialize(), $roles),
 			'memberships' => array_map(static fn (BoardPolicyRoleMembership $m) => $m->jsonSerialize(), $memberships),
 			'defaultRoles' => array_map(static fn (BoardPolicyDefaultRole $d) => $d->jsonSerialize(), $defaults),
@@ -355,7 +565,7 @@ class CardPolicyService
 	}
 
 	/**
-	 * @return array{move: string[], approve: string[], view: string[]}
+	 * @return array{move: string[], sign: string[], verify: string[], view: string[]}
 	 */
 	public function getDefaultRoleKeysByAction(int $boardId): array
 	{
@@ -365,25 +575,34 @@ class CardPolicyService
 		foreach ($roles as $r) {
 			$roleKeyById[(int) $r->getId()] = (string) $r->getRoleKey();
 		}
-		$out = ['move' => [], 'approve' => [], 'view' => []];
-		foreach ($defaults as $d) {
-			$action = (string) $d->getAction();
-			$roleId = (int) $d->getRoleId();
-			if (!isset($out[$action]) || !isset($roleKeyById[$roleId])) {
-				continue;
+			$out = ['move' => [], 'sign' => [], 'verify' => [], 'view' => []];
+			foreach ($defaults as $d) {
+				$action = (string) $d->getAction();
+				$roleId = (int) $d->getRoleId();
+				if (!isset($roleKeyById[$roleId])) {
+					continue;
+				}
+				if ($action === self::ACTION_APPROVE) {
+					$out['sign'][] = $roleKeyById[$roleId];
+					$out['verify'][] = $roleKeyById[$roleId];
+					continue;
+				}
+				if (!isset($out[$action])) {
+					continue;
+				}
+				$out[$action][] = $roleKeyById[$roleId];
 			}
-			$out[$action][] = $roleKeyById[$roleId];
+			$out['move'] = array_values(array_unique($out['move']));
+			$out['sign'] = array_values(array_unique($out['sign']));
+			$out['verify'] = array_values(array_unique($out['verify']));
+			$out['view'] = array_values(array_unique($out['view']));
+			return $out;
 		}
-		$out['move'] = array_values(array_unique($out['move']));
-		$out['approve'] = array_values(array_unique($out['approve']));
-		$out['view'] = array_values(array_unique($out['view']));
-		return $out;
-	}
 
 	/**
 	 * Returns explicit per-card policies keyed by cardId.
 	 *
-	 * @return array<int, array{move: string[], approve: string[], view: string[]}>
+	 * @return array<int, array{move: string[], sign: string[], verify: string[], view: string[]}>
 	 */
 	public function getExplicitCardPoliciesByBoard(int $boardId): array
 	{
@@ -403,21 +622,31 @@ class CardPolicyService
 			$cardId = (int) ($row['card_id'] ?? 0);
 			$action = (string) ($row['action'] ?? '');
 			$roleKey = (string) ($row['role_key'] ?? '');
-			if ($cardId <= 0 || ($action !== self::ACTION_MOVE && $action !== self::ACTION_APPROVE && $action !== self::ACTION_VIEW) || $roleKey === '') {
-				continue;
+				if (
+					$cardId <= 0
+					|| ($action !== self::ACTION_MOVE && $action !== self::ACTION_SIGN && $action !== self::ACTION_VERIFY && $action !== self::ACTION_APPROVE && $action !== self::ACTION_VIEW)
+					|| $roleKey === ''
+				) {
+					continue;
+				}
+				if (!isset($out[$cardId])) {
+					$out[$cardId] = ['move' => [], 'sign' => [], 'verify' => [], 'view' => []];
+				}
+				if ($action === self::ACTION_APPROVE) {
+					$out[$cardId]['sign'][] = $roleKey;
+					$out[$cardId]['verify'][] = $roleKey;
+					continue;
+				}
+				$out[$cardId][$action][] = $roleKey;
 			}
-			if (!isset($out[$cardId])) {
-				$out[$cardId] = ['move' => [], 'approve' => [], 'view' => []];
-			}
-			$out[$cardId][$action][] = $roleKey;
-		}
 		$result->closeCursor();
 
-		foreach ($out as $cardId => $actions) {
-			$out[$cardId]['move'] = array_values(array_unique($actions['move'] ?? []));
-			$out[$cardId]['approve'] = array_values(array_unique($actions['approve'] ?? []));
-			$out[$cardId]['view'] = array_values(array_unique($actions['view'] ?? []));
-		}
+			foreach ($out as $cardId => $actions) {
+				$out[$cardId]['move'] = array_values(array_unique($actions['move'] ?? []));
+				$out[$cardId]['sign'] = array_values(array_unique($actions['sign'] ?? []));
+				$out[$cardId]['verify'] = array_values(array_unique($actions['verify'] ?? []));
+				$out[$cardId]['view'] = array_values(array_unique($actions['view'] ?? []));
+			}
 		return $out;
 	}
 
@@ -430,36 +659,50 @@ class CardPolicyService
 		$this->settingMapper->update($setting);
 	}
 
+	public function setDoneStackId(int $boardId, int $stackId): void
+	{
+		$this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
+		$setting = $this->ensureBoardSettings($boardId);
+		$setting->setDoneStackId($stackId);
+		$setting->setUpdatedAt(new DateTime('now'));
+		$this->settingMapper->update($setting);
+	}
+
 	/**
 	 * @param string[] $moveRoleKeys
-	 * @param string[] $approveRoleKeys
+	 * @param string[] $signRoleKeys
+	 * @param string[] $verifyRoleKeys
 	 * @param string[] $viewRoleKeys
 	 */
-	public function setBoardDefaultRolesByKeys(int $boardId, array $moveRoleKeys, array $approveRoleKeys, array $viewRoleKeys = []): void
+	public function setBoardDefaultRolesByKeys(int $boardId, array $moveRoleKeys, array $signRoleKeys, array $verifyRoleKeys, array $viewRoleKeys = []): void
 	{
 		$this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
 		$this->ensureDefaultRolesAndDefaults($boardId);
 
 		$moveRoleIds = $this->resolveRoleIdsByKeys($boardId, $moveRoleKeys);
-		$approveRoleIds = $this->resolveRoleIdsByKeys($boardId, $approveRoleKeys);
+		$signRoleIds = $this->resolveRoleIdsByKeys($boardId, $signRoleKeys);
+		$verifyRoleIds = $this->resolveRoleIdsByKeys($boardId, $verifyRoleKeys);
 		$viewRoleIds = $this->resolveRoleIdsByKeys($boardId, $viewRoleKeys);
 		$this->replaceDefaultRoles($boardId, self::ACTION_MOVE, $moveRoleIds);
-		$this->replaceDefaultRoles($boardId, self::ACTION_APPROVE, $approveRoleIds);
+		$this->replaceDefaultRoles($boardId, self::ACTION_SIGN, $signRoleIds);
+		$this->replaceDefaultRoles($boardId, self::ACTION_VERIFY, $verifyRoleIds);
 		$this->replaceDefaultRoles($boardId, self::ACTION_VIEW, $viewRoleIds);
 	}
 
 	/**
 	 * @param string[] $moveRoleKeys
-	 * @param string[] $approveRoleKeys
+	 * @param string[] $signRoleKeys
+	 * @param string[] $verifyRoleKeys
 	 * @param string[] $viewRoleKeys
 	 */
-	public function setCardPolicyByRoleKeys(int $boardId, int $cardId, array $moveRoleKeys, array $approveRoleKeys, array $viewRoleKeys = []): void
+	public function setCardPolicyByRoleKeys(int $boardId, int $cardId, array $moveRoleKeys, array $signRoleKeys, array $verifyRoleKeys, array $viewRoleKeys = []): void
 	{
 		$this->permissionService->checkPermission(null, $boardId, Acl::PERMISSION_MANAGE);
 		$this->ensureDefaultRolesAndDefaults($boardId);
 
 		$moveRoleIds = $this->resolveRoleIdsByKeys($boardId, $moveRoleKeys);
-		$approveRoleIds = $this->resolveRoleIdsByKeys($boardId, $approveRoleKeys);
+		$signRoleIds = $this->resolveRoleIdsByKeys($boardId, $signRoleKeys);
+		$verifyRoleIds = $this->resolveRoleIdsByKeys($boardId, $verifyRoleKeys);
 		$viewRoleIds = $this->resolveRoleIdsByKeys($boardId, $viewRoleKeys);
 
 		$policy = $this->cardPolicyMapper->findByBoardAndCard($boardId, $cardId);
@@ -477,7 +720,8 @@ class CardPolicyService
 		}
 
 		$this->replaceCardPolicyRoles((int) $policy->getId(), self::ACTION_MOVE, $moveRoleIds);
-		$this->replaceCardPolicyRoles((int) $policy->getId(), self::ACTION_APPROVE, $approveRoleIds);
+		$this->replaceCardPolicyRoles((int) $policy->getId(), self::ACTION_SIGN, $signRoleIds);
+		$this->replaceCardPolicyRoles((int) $policy->getId(), self::ACTION_VERIFY, $verifyRoleIds);
 		$this->replaceCardPolicyRoles((int) $policy->getId(), self::ACTION_VIEW, $viewRoleIds);
 	}
 
@@ -643,7 +887,10 @@ class CardPolicyService
 			return;
 		}
 
-		if (!in_array($action, [self::ACTION_MOVE, self::ACTION_APPROVE], true)) {
+		if ($action === self::ACTION_APPROVE) {
+			$action = self::ACTION_VERIFY;
+		}
+		if (!in_array($action, [self::ACTION_MOVE, self::ACTION_SIGN, self::ACTION_VERIFY], true)) {
 			throw new NoPermissionException('Unknown policy action');
 		}
 
@@ -793,7 +1040,7 @@ class CardPolicyService
 	}
 
 	/**
-	 * Union of default roles for move+approve.
+	 * Union of default roles for move/sign/verify.
 	 *
 	 * @return int[]
 	 */
@@ -803,10 +1050,14 @@ class CardPolicyService
 			return $this->defaultUnionRoleIdsCache[$boardId];
 		}
 		$move = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_MOVE);
-		$approve = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_APPROVE);
+		$sign = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_SIGN);
+		$verify = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_VERIFY);
+		$legacyApprove = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_APPROVE);
 		$roleIds = array_merge(
 			array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $move),
-			array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $approve),
+			array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $sign),
+			array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $verify),
+			array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $legacyApprove),
 		);
 		$roleIds = array_values(array_unique(array_filter($roleIds, static fn (int $id) => $id > 0)));
 		$this->defaultUnionRoleIdsCache[$boardId] = $roleIds;
@@ -832,6 +1083,7 @@ class CardPolicyService
 		if ($cardIds === [] || $actions === []) {
 			return [];
 		}
+		$queryActions = $this->expandActionsForQuery($actions);
 
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('cp.card_id', 'cpr.role_id')
@@ -839,7 +1091,7 @@ class CardPolicyService
 			->innerJoin('cp', 'deck_card_policy_roles', 'cpr', $qb->expr()->eq('cp.id', 'cpr.policy_id'))
 			->where($qb->expr()->eq('cp.board_id', $qb->createNamedParameter($boardId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->in('cp.card_id', $qb->createNamedParameter($cardIds, IQueryBuilder::PARAM_INT_ARRAY)))
-			->andWhere($qb->expr()->in('cpr.action', $qb->createNamedParameter(array_values($actions), IQueryBuilder::PARAM_STR_ARRAY)));
+			->andWhere($qb->expr()->in('cpr.action', $qb->createNamedParameter($queryActions, IQueryBuilder::PARAM_STR_ARRAY)));
 
 		$result = $qb->executeQuery();
 		$out = [];
@@ -861,6 +1113,27 @@ class CardPolicyService
 		}
 
 		return $out;
+	}
+
+	/**
+	 * @param string[] $actions
+	 * @return string[]
+	 */
+	private function expandActionsForQuery(array $actions): array
+	{
+		$out = [];
+		foreach ($actions as $action) {
+			$normalized = (string) $action;
+			if ($normalized === '') {
+				continue;
+			}
+			$out[] = $normalized;
+			if ($normalized === self::ACTION_SIGN || $normalized === self::ACTION_VERIFY) {
+				$out[] = self::ACTION_APPROVE;
+			}
+		}
+
+		return array_values(array_unique($out));
 	}
 
 	private function membershipMatchesUser(BoardPolicyRoleMembership $membership, string $userId): bool
@@ -889,15 +1162,22 @@ class CardPolicyService
 	 */
 	private function getEffectiveRoleIdsForCard(int $boardId, int $cardId, string $action): array
 	{
+		$actions = $this->expandActionsForQuery([$action]);
 		$policy = $this->cardPolicyMapper->findByBoardAndCard($boardId, $cardId);
 		if ($policy instanceof CardPolicy) {
-			$roles = $this->cardPolicyRoleMapper->findByPolicyAndAction((int) $policy->getId(), $action);
-			$roleIds = array_map(static fn (CardPolicyRole $r) => (int) $r->getRoleId(), $roles);
+			$roleIds = [];
+			foreach ($actions as $resolvedAction) {
+				$roles = $this->cardPolicyRoleMapper->findByPolicyAndAction((int) $policy->getId(), $resolvedAction);
+				$roleIds = array_merge($roleIds, array_map(static fn (CardPolicyRole $r) => (int) $r->getRoleId(), $roles));
+			}
 			return array_values(array_unique(array_filter($roleIds, static fn (int $id) => $id > 0)));
 		}
 
-		$defaults = $this->defaultRoleMapper->findByBoardAndAction($boardId, $action);
-		$roleIds = array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $defaults);
+		$roleIds = [];
+		foreach ($actions as $resolvedAction) {
+			$defaults = $this->defaultRoleMapper->findByBoardAndAction($boardId, $resolvedAction);
+			$roleIds = array_merge($roleIds, array_map(static fn (BoardPolicyDefaultRole $d) => (int) $d->getRoleId(), $defaults));
+		}
 		return array_values(array_unique(array_filter($roleIds, static fn (int $id) => $id > 0)));
 	}
 
@@ -921,8 +1201,9 @@ class CardPolicyService
 		}
 
 		$defaultMove = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_MOVE);
-		$defaultApprove = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_APPROVE);
-		if ($defaultMove !== [] && $defaultApprove !== []) {
+		$defaultSign = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_SIGN);
+		$defaultVerify = $this->defaultRoleMapper->findByBoardAndAction($boardId, self::ACTION_VERIFY);
+		if ($defaultMove !== [] && $defaultSign !== [] && $defaultVerify !== []) {
 			return;
 		}
 
@@ -931,15 +1212,16 @@ class CardPolicyService
 			$rolesByKey[(string) $role->getRoleKey()] = (int) $role->getId();
 		}
 
-		// Defaults: move -> all roles; approve -> CPL + Grid operator
+		// Defaults: move -> all roles; sign/verify -> CPL + Grid operator
 		$moveRoleIds = array_values($rolesByKey);
-		$approveRoleIds = array_values(array_filter([
+		$approvalRoleIds = array_values(array_filter([
 			$rolesByKey['cpl'] ?? null,
 			$rolesByKey['grid_operator'] ?? null,
 		], static fn ($v) => is_int($v) && $v > 0));
 
 		$this->replaceDefaultRoles($boardId, self::ACTION_MOVE, $moveRoleIds);
-		$this->replaceDefaultRoles($boardId, self::ACTION_APPROVE, $approveRoleIds);
+		$this->replaceDefaultRoles($boardId, self::ACTION_SIGN, $approvalRoleIds);
+		$this->replaceDefaultRoles($boardId, self::ACTION_VERIFY, $approvalRoleIds);
 	}
 
 	/**

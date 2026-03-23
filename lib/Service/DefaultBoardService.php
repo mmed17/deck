@@ -84,11 +84,12 @@ class DefaultBoardService
 		$defaultStacks[] = $this->stackService->create($this->l10n->t('Next Priority'), $boardId, 2);
 		$defaultStacks[] = $this->stackService->create($this->l10n->t('In Progress'), $boardId, 3);
 		$defaultStacks[] = $this->stackService->create($this->l10n->t('To Review'), $boardId, 4);
-		$defaultStacks[] = $this->stackService->create($this->l10n->t('Approved/Done'), $boardId, 5);
+		$defaultStacks[] = $this->stackService->create($this->l10n->t('Approved'), $boardId, 5);
+		$defaultStacks[] = $this->stackService->create($this->l10n->t('Done'), $boardId, 6);
 
 		$defaultCards[] = $this->cardService->create($this->l10n->t('Example Task 1'), $defaultStacks[0]->getId(), 'text', 0, $userId);
 		$defaultCards[] = $this->cardService->create($this->l10n->t('Example Task 2'), $defaultStacks[1]->getId(), 'text', 0, $userId);
-		$defaultCards[] = $this->cardService->create($this->l10n->t('Example Task 3'), $defaultStacks[4]->getId(), 'text', 0, $userId);
+		$defaultCards[] = $this->cardService->create($this->l10n->t('Example Task 3'), $defaultStacks[5]->getId(), 'text', 0, $userId);
 
 		return $defaultBoard;
 	}
