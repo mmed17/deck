@@ -42,7 +42,7 @@
                 />
                 <KpiBreakdownCard
                     title="Open Tasks"
-                    :left-label="'Important'"
+                    :left-label="'Kritieke Processtap'"
                     :left-value="importantOpenTasks"
                     :left-total="importantTasks"
                     :left-color="'#dc2626'"
@@ -202,7 +202,7 @@ export default {
         hasImportantLabel(card) {
             const labels = Array.isArray(card?.labels) ? card.labels : []
             if (labels.length === 0) return false
-            const importantTitles = ['belangrijk', 'important']
+            const importantTitles = ['kritieke processtap', 'belangrijk', 'important']
             return labels.some((l) => importantTitles.includes(String(l?.title ?? '').trim().toLowerCase()))
         },
         /**

@@ -11,7 +11,7 @@ export default {
 		labelStyle() {
 			return (label) => {
 				const title = String(label?.title ?? '').trim().toLowerCase()
-				const importantTitles = ['important', 'belangrijk']
+				const importantTitles = ['important', 'kritieke processtap', 'belangrijk']
 				if (importantTitles.includes(title)) {
 					return {
 						backgroundColor: '#ffffff',
