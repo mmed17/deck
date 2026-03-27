@@ -22,7 +22,6 @@ export default {
 					t('deck', 'Failed to upload {name}', { name: file.name }) + ' - '
 						+ t('deck', 'Maximum file size of {size} exceeded', { size: formatFileSize(this.maxUploadSize) }),
 				)
-				event.target.value = ''
 				return
 			}
 
@@ -31,9 +30,9 @@ export default {
 			bodyFormData.append('cardId', this.cardId)
 			bodyFormData.append('type', type)
 			bodyFormData.append('file', file)
-			await queue.add(async () => {
+			return queue.add(async () => {
 				try {
-					await this.$store.dispatch('createAttachment', {
+					const attachment = await this.$store.dispatch('createAttachment', {
 						cardId: this.cardId,
 						formData: bodyFormData,
 						onUploadProgress: (e) => {
@@ -42,6 +41,7 @@ export default {
 							this.$set(this.uploadQueue[file.name], 'progress', percentCompleted)
 						},
 					})
+					return attachment
 				} catch (err) {
 					if (err.response.data.status === 409) {
 						this.overwriteAttachment = err.response.data.data
@@ -49,10 +49,11 @@ export default {
 					} else {
 						showError(err.response.data ? err.response.data.message : 'Failed to upload file')
 					}
+					return null
+				} finally {
+					this.$delete(this.uploadQueue, file.name)
 				}
-				this.$delete(this.uploadQueue, file.name)
 			})
-
 		},
 
 		overrideAttachment() {

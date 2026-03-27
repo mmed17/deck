@@ -4,6 +4,7 @@
  * Exposes:
  * - window.OCA.Deck.EmbeddedTasks.mount({ el, boardId })
  * - window.OCA.Deck.EmbeddedAnalytics.mount({ el, boardId })
+ * - window.OCA.Deck.EmbeddedPermissionsOverview.mount({ el, boardId })
  */
 
 import Vue from 'vue'
@@ -14,6 +15,7 @@ import './models/index.js'
 
 import EmbeddedTasksRoot from './components/embedded/EmbeddedTasksRoot.vue'
 import EmbeddedAnalyticsRoot from './components/embedded/EmbeddedAnalyticsRoot.vue'
+import EmbeddedPermissionsOverviewRoot from './components/embedded/EmbeddedPermissionsOverviewRoot.vue'
 
 if (!window.OCA) {
 	window.OCA = {}
@@ -89,5 +91,11 @@ window.OCA.Deck.EmbeddedTasks = {
 window.OCA.Deck.EmbeddedAnalytics = {
 	mount({ el, boardId }) {
 		return mountRoot(EmbeddedAnalyticsRoot, { name: 'EmbeddedAnalytics', el, boardId })
+	},
+}
+
+window.OCA.Deck.EmbeddedPermissionsOverview = {
+	mount({ el, boardId }) {
+		return mountRoot(EmbeddedPermissionsOverviewRoot, { name: 'EmbeddedPermissionsOverview', el, boardId })
 	},
 }

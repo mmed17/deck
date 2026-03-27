@@ -4,7 +4,11 @@
 -->
 
 <template>
-	<AttachmentDragAndDrop :card-id="cardId" class="drop-upload--sidebar">
+	<AttachmentDragAndDrop
+		:card-id="cardId"
+		:defer-upload="true"
+		class="drop-upload--sidebar"
+		@files-dropped="openUploadModalForFiles">
 		<div v-if="!isReadOnly" class="button-group">
 			<NcButton class="icon-upload" @click="uploadNewFile()">
 				{{ t('deck', 'Upload new files') }}
@@ -55,17 +59,9 @@
 						</div>
 					</a>
 					<div v-if="showOcrForAttachment(attachment)" class="attachment__ocr" @click.stop>
-						<select class="attachment__ocr-select"
-							:value="documentTypeValue(attachmentFileId(attachment))"
-							:disabled="documentTypesLoading || isAssigning(attachmentFileId(attachment)) || documentTypes.length === 0"
-							@change="assignDocumentType(attachment, $event.target.value)">
-							<option value="">
-								{{ documentTypes.length === 0 ? t('deck', 'No types') : t('deck', 'Assign type...') }}
-							</option>
-							<option v-for="type in documentTypes" :key="`doc-type-${type.id}`" :value="type.id">
-								{{ type.name }}
-							</option>
-						</select>
+						<span class="attachment__ocr-type-label">
+							{{ processingDocumentTypeLabel(attachmentFileId(attachment)) }}
+						</span>
 						<div class="attachment__ocr-status"
 							:class="statusBadgeClass(attachmentFileId(attachment))"
 							:title="statusTooltip(attachmentFileId(attachment))">
@@ -118,6 +114,58 @@
 				</NcActions>
 			</li>
 		</ul>
+
+		<NcModal v-if="showUploadModal" :title="t('deck', 'Upload files')" @close="closeUploadModal">
+			<div class="attachment__upload-modal">
+				<div class="attachment__upload-modal-card">
+					{{ t('deck', 'Card attachments') }}
+				</div>
+				<label class="attachment__upload-modal-label" for="attachment-upload-type">
+					{{ t('deck', 'Document type') }}
+				</label>
+				<select
+					id="attachment-upload-type"
+					v-model="uploadDocumentTypeId"
+					class="attachment__upload-type-select"
+					:disabled="documentTypesLoading || documentTypes.length === 0 || uploadBusy">
+					<option value="">
+						{{ documentTypes.length === 0 ? t('deck', 'No document types') : t('deck', 'Select document type...') }}
+					</option>
+					<option v-for="type in documentTypes" :key="`upload-doc-type-${type.id}`" :value="String(type.id)">
+						{{ type.name }}
+					</option>
+				</select>
+				<div class="attachment__upload-modal-row">
+					<NcButton :disabled="uploadBusy" @click="$refs.filesAttachment?.click?.()">
+						{{ t('deck', 'Choose files') }}
+					</NcButton>
+					<span class="attachment__upload-modal-hint">
+						{{ selectedUploadFiles.length === 0
+							? t('deck', 'No files selected yet.')
+							: t('deck', '{count} file(s) selected.', { count: selectedUploadFiles.length }) }}
+					</span>
+				</div>
+				<ul v-if="selectedUploadFiles.length > 0" class="attachment__upload-file-list">
+					<li
+						v-for="file in selectedUploadFiles"
+						:key="`upload-file-${file.name}-${file.size}`"
+						class="attachment__upload-file-item">
+						<span>{{ file.name }}</span>
+						<span>{{ formattedFileSize(file.size) }}</span>
+					</li>
+				</ul>
+				<div class="attachment__ocr-actions attachment__ocr-actions--upload">
+					<NcButton :disabled="uploadBusy" @click="closeUploadModal">
+						{{ t('deck', 'Cancel') }}
+					</NcButton>
+					<NcButton
+						:disabled="uploadBusy || !uploadDocumentTypeId || selectedUploadFiles.length === 0"
+						@click="uploadSelectedFiles">
+						{{ uploadBusy ? t('deck', 'Uploading...') : t('deck', 'Upload and process') }}
+					</NcButton>
+				</div>
+			</div>
+		</NcModal>
 
 		<NcModal v-if="activeExtractedFileId" :title="t('deck', 'Extracted Data')" @close="closeExtractedDataModal">
 			<div class="attachment__ocr-modal">
@@ -249,6 +297,10 @@ export default {
 			activeExtractedFileId: null,
 			activeExtractedDraft: {},
 			savingExtractedFileId: null,
+			showUploadModal: false,
+			uploadDocumentTypeId: '',
+			selectedUploadFiles: [],
+			uploadBusy: false,
 		}
 	},
 	computed: {
@@ -378,6 +430,10 @@ export default {
 			this.activeExtractedFileId = null
 			this.activeExtractedDraft = {}
 			this.savingExtractedFileId = null
+			this.showUploadModal = false
+			this.uploadDocumentTypeId = ''
+			this.selectedUploadFiles = []
+			this.uploadBusy = false
 		},
 		resetOcrContextState() {
 			this.ocrBoardId = null
@@ -523,13 +579,26 @@ export default {
 			const record = this.processingByFileId[String(fileId)] || null
 			return record?.document_type_id || ''
 		},
+		processingDocumentTypeLabel(fileId) {
+			const value = Number(this.documentTypeValue(fileId))
+			if (!Number.isFinite(value) || value <= 0) {
+				return t('deck', 'No type')
+			}
+
+			const type = this.documentTypes.find((entry) => Number(entry?.id) === value) || null
+			return type?.name || t('deck', 'Unknown type')
+		},
 		statusLabel(fileId) {
 			const record = this.processingByFileId[String(fileId)] || null
 			if (!record) {
-				return 'Unassigned'
+				return 'Queued'
 			}
 			if (record.ocr_status === 'failed') {
 				return 'Failed'
+			}
+			if (record.ocr_status === 'aborted') {
+				const missingCount = this.missingFieldsCount(fileId)
+				return missingCount > 0 ? `Aborted (${missingCount} missing)` : 'Aborted'
 			}
 			if (record.ocr_status === 'stale') {
 				return 'Stale'
@@ -538,10 +607,6 @@ export default {
 				return 'Processing'
 			}
 			if (record.ocr_status === 'done') {
-				if (this.hasPartialExtraction(fileId)) {
-					const missingCount = this.missingFieldsCount(fileId)
-					return missingCount > 0 ? `Partial (${missingCount} missing)` : 'Partial'
-				}
 				return 'Ready'
 			}
 			return 'Queued'
@@ -624,7 +689,7 @@ export default {
 		},
 		hasPartialExtraction(fileId) {
 			const record = this.processingByFileId[String(fileId)] || null
-			if (!record || record.ocr_status !== 'done') {
+			if (!record || (record.ocr_status !== 'done' && record.ocr_status !== 'aborted')) {
 				return false
 			}
 			const entries = this.extractedEntries(fileId, true)
@@ -646,6 +711,9 @@ export default {
 			if (record.ocr_status === 'failed') {
 				return 'AlertCircleOutline'
 			}
+			if (record.ocr_status === 'aborted') {
+				return 'AlertCircleOutline'
+			}
 			if (record.ocr_status === 'stale') {
 				return 'ClockOutline'
 			}
@@ -653,9 +721,6 @@ export default {
 				return 'Sync'
 			}
 			if (record.ocr_status === 'done') {
-				if (this.hasPartialExtraction(fileId)) {
-					return 'AlertCircleOutline'
-				}
 				return 'CheckCircleOutline'
 			}
 			return 'ClockOutline'
@@ -664,7 +729,7 @@ export default {
 			const record = this.processingByFileId[String(fileId)] || null
 			if (!record) return 'attachment__ocr-status--muted'
 			if (record.ocr_status === 'failed') return 'attachment__ocr-status--error'
-			if (record.ocr_status === 'done' && this.hasPartialExtraction(fileId)) return 'attachment__ocr-status--partial'
+			if (record.ocr_status === 'aborted') return 'attachment__ocr-status--partial'
 			if (record.ocr_status === 'done') return 'attachment__ocr-status--success'
 			if (record.ocr_status === 'processing') return 'attachment__ocr-status--spin'
 			return 'attachment__ocr-status--pending'
@@ -676,11 +741,11 @@ export default {
 			}
 
 			const nextStatus = this.statusLabel(fileId)
-			if (nextStatus.startsWith('Partial')) {
-				return 'Document processed with missing fields.'
-			}
 			if (nextStatus === 'Ready') {
 				return successMessage
+			}
+			if (nextStatus.startsWith('Aborted')) {
+				return payload?.processing?.error_message || 'Document processing was aborted because required fields are missing.'
 			}
 			if (nextStatus === 'Failed') {
 				return payload?.processing?.error_message || 'OCR processing failed.'
@@ -699,7 +764,46 @@ export default {
 		},
 		canOpenExtractedDataModal(fileId) {
 			const record = this.processingByFileId[String(fileId)] || null
-			return !!(record && record.document_type_id)
+			return !!(record && record.document_type_id && this.extractedEntries(fileId, true).length > 0)
+		},
+		openUploadModalForFiles(files) {
+			if (this.isReadOnly || this.uploadBusy) {
+				return
+			}
+			this.selectedUploadFiles = Array.isArray(files) ? files.filter(Boolean) : []
+			this.showUploadModal = true
+		},
+		closeUploadModal() {
+			if (this.uploadBusy) {
+				return
+			}
+			this.showUploadModal = false
+			this.selectedUploadFiles = []
+		},
+		async uploadSelectedFiles() {
+			if (this.uploadBusy || this.selectedUploadFiles.length === 0) {
+				return
+			}
+
+			const documentTypeId = Number(this.uploadDocumentTypeId)
+			if (!Number.isFinite(documentTypeId) || documentTypeId <= 0) {
+				return
+			}
+
+			this.uploadBusy = true
+			try {
+				for (const file of this.selectedUploadFiles) {
+					const attachment = await this.onLocalAttachmentSelected(file, 'file')
+					if (!attachment) {
+						continue
+					}
+					await this.assignUploadedAttachmentDocumentType(attachment, documentTypeId)
+				}
+				this.showUploadModal = false
+				this.selectedUploadFiles = []
+			} finally {
+				this.uploadBusy = false
+			}
 		},
 		setActiveExtractedDraft(fieldName, value) {
 			this.$set(this.activeExtractedDraft, fieldName, String(value ?? ''))
@@ -707,7 +811,7 @@ export default {
 		isSavingExtracted(fileId) {
 			return String(this.savingExtractedFileId || '') === String(fileId || '')
 		},
-		async assignDocumentType(attachment, documentTypeId) {
+		async assignUploadedAttachmentDocumentType(attachment, documentTypeId) {
 			if (!this.showOcrForAttachment(attachment)) {
 				return
 			}
@@ -802,14 +906,19 @@ export default {
 			}
 		},
 		handleUploadFile(event) {
-			const files = event.target.files ?? []
-			for (const file of files) {
-				this.onLocalAttachmentSelected(file, 'file')
-			}
+			const files = Array.from(event.target.files ?? [])
 			event.target.value = ''
+			if (files.length === 0) {
+				return
+			}
+			this.openUploadModalForFiles(files)
 		},
 		uploadNewFile() {
-			this.$refs.filesAttachment.click()
+			if (this.isReadOnly || this.uploadBusy) {
+				return
+			}
+			this.selectedUploadFiles = []
+			this.showUploadModal = true
 		},
 		shareFromFiles() {
 			picker.pick()
@@ -965,14 +1074,20 @@ export default {
 		min-height: 28px;
 	}
 
-	.attachment__ocr-select {
+	.attachment__ocr-type-label {
+		display: inline-flex;
+		align-items: center;
 		border: 1px solid var(--color-border-dark);
 		border-radius: 6px;
 		background: var(--color-main-background);
 		color: var(--color-main-text);
 		font-size: 12px;
-		padding: 4px 6px;
+		padding: 4px 8px;
 		max-width: 170px;
+		min-height: 26px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.attachment__ocr-status {
@@ -1052,6 +1167,69 @@ export default {
 		padding: 8px;
 	}
 
+	.attachment__upload-modal {
+		padding: 8px;
+		min-width: min(560px, 90vw);
+	}
+
+	.attachment__upload-modal-card {
+		font-weight: 600;
+		margin-bottom: 10px;
+	}
+
+	.attachment__upload-modal-label {
+		display: block;
+		margin-bottom: 6px;
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	.attachment__upload-type-select {
+		width: 100%;
+		margin-bottom: 12px;
+		border: 1px solid var(--color-border-dark);
+		border-radius: 6px;
+		background: var(--color-main-background);
+		color: var(--color-main-text);
+		font-size: 13px;
+		padding: 8px 10px;
+	}
+
+	.attachment__upload-modal-row {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin-bottom: 12px;
+	}
+
+	.attachment__upload-modal-hint {
+		font-size: 13px;
+		color: var(--color-text-maxcontrast);
+	}
+
+	.attachment__upload-file-list {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		border: 1px solid var(--color-border);
+		border-radius: 8px;
+		overflow: hidden;
+	}
+
+	.attachment__upload-file-item {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 10px 12px;
+		font-size: 13px;
+		border-top: 1px solid var(--color-border);
+	}
+
+	.attachment__upload-file-item:first-child {
+		border-top: 0;
+	}
+
 	.attachment__ocr-modal-filename {
 		font-weight: 600;
 		margin-bottom: 10px;
@@ -1116,6 +1294,10 @@ export default {
 		display: flex;
 		justify-content: flex-end;
 		margin-top: 10px;
+	}
+
+	.attachment__ocr-actions--upload {
+		gap: 8px;
 	}
 
 	@keyframes attachment-ocr-spin {
