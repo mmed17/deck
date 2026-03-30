@@ -215,7 +215,7 @@ import { generateUrl, generateOcsUrl, generateRemoteUrl } from '@nextcloud/route
 import { mapState, mapActions } from 'vuex'
 import { loadState } from '@nextcloud/initial-state'
 import attachmentUpload from '../../mixins/attachmentUpload.js'
-import { getFilePickerBuilder } from '@nextcloud/dialogs'
+import { getFilePickerBuilder, showError } from '@nextcloud/dialogs'
 import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
 import CheckCircleOutline from 'vue-material-design-icons/CheckCircleOutline.vue'
 import ClockOutline from 'vue-material-design-icons/ClockOutline.vue'
@@ -793,16 +793,65 @@ export default {
 			this.uploadBusy = true
 			try {
 				for (const file of this.selectedUploadFiles) {
-					const attachment = await this.onLocalAttachmentSelected(file, 'file')
+					const attachment = await this.uploadCardAttachmentWithOcr(file, documentTypeId)
 					if (!attachment) {
 						continue
 					}
-					await this.assignUploadedAttachmentDocumentType(attachment, documentTypeId)
 				}
 				this.showUploadModal = false
 				this.selectedUploadFiles = []
 			} finally {
 				this.uploadBusy = false
+			}
+		},
+		async uploadCardAttachmentWithOcr(file, documentTypeId) {
+			const projectId = Number(this.projectId)
+			if (!Number.isFinite(projectId) || projectId <= 0) {
+				const attachment = await this.onLocalAttachmentSelected(file, 'file')
+				if (attachment) {
+					await this.assignUploadedAttachmentDocumentType(attachment, documentTypeId)
+				}
+				return attachment
+			}
+
+			if (this.maxUploadSize > 0 && file.size > this.maxUploadSize) {
+				showError(
+					t('deck', 'Failed to upload {name}', { name: file.name }) + ' - '
+						+ t('deck', 'Maximum file size of {size} exceeded', { size: formatFileSize(this.maxUploadSize) }),
+				)
+				return null
+			}
+
+			this.$set(this.uploadQueue, file.name, { name: file.name, progress: 0 })
+			try {
+				const payload = await projectOcrApi.uploadCardAttachment(
+					projectId,
+					this.cardId,
+					documentTypeId,
+					file,
+					(e) => {
+						const percentCompleted = Math.round((e.loaded * 100) / e.total)
+						this.$set(this.uploadQueue[file.name], 'progress', percentCompleted)
+					},
+				)
+				const attachment = payload?.attachment ?? null
+				if (!attachment) {
+					return null
+				}
+				this.$store.dispatch('registerAttachment', { cardId: this.cardId, attachment })
+				const fileId = this.attachmentFileId(attachment)
+				if (fileId > 0 && payload?.processing) {
+					this.$set(this.processingByFileId, String(fileId), payload.processing)
+				}
+				return attachment
+			} catch (error) {
+				const payload = error?.response?.data ?? {}
+				const missingFields = Array.isArray(payload?.missing_fields) ? payload.missing_fields : []
+				const message = payload?.message || error?.response?.data?.message || 'Failed to upload file'
+				showError(missingFields.length > 0 ? `${message} (${missingFields.join(', ')})` : message)
+				return null
+			} finally {
+				this.$delete(this.uploadQueue, file.name)
 			}
 		},
 		setActiveExtractedDraft(fieldName, value) {

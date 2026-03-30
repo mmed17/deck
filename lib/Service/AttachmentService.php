@@ -203,12 +203,24 @@ class AttachmentService {
 				$attachment = $this->attachmentMapper->insert($attachment);
 			}
 
-			$service->extendData($attachment);
-			$this->addCreator($attachment);
+			$this->enrichAttachment($attachment);
 		} catch (InvalidAttachmentType $e) {
 			// just store the data
 		}
 
+		$this->postAttachmentCreated($attachment);
+		return $attachment;
+	}
+
+	public function enrichAttachment(Attachment $attachment): Attachment {
+		$service = $this->getService($attachment->getType());
+		$service->extendData($attachment);
+		$this->addCreator($attachment);
+		return $attachment;
+	}
+
+	public function postAttachmentCreated(Attachment $attachment): Attachment {
+		$this->attachmentCacheHelper->clearAttachmentCount((int) $attachment->getCardId());
 		$this->changeHelper->cardChanged($attachment->getCardId());
 		$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_CARD, $attachment, ActivityManager::SUBJECT_ATTACHMENT_CREATE);
 		return $attachment;

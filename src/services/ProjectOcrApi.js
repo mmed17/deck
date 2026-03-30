@@ -59,6 +59,23 @@ export class ProjectOcrApi {
 		return response?.data ?? null
 	}
 
+	async uploadCardAttachment(projectId, cardId, documentTypeId, file, onUploadProgress) {
+		const bodyFormData = new FormData()
+		bodyFormData.append('document_type_id', String(documentTypeId))
+		bodyFormData.append('file', file)
+		const response = await axios.post(
+			generateUrl(`/apps/projectcreatoraio/api/v1/projects/${projectId}/cards/${cardId}/ocr/attachments`),
+			bodyFormData,
+			{
+				headers: {
+					'OCS-APIRequest': 'true',
+				},
+				onUploadProgress,
+			},
+		)
+		return response?.data ?? null
+	}
+
 	async reprocessFileProcessing(projectId, fileId) {
 		const response = await axios.post(generateUrl(`/apps/projectcreatoraio/api/v1/projects/${projectId}/files/${fileId}/ocr/reprocess`), {}, {
 			headers: this.headers(),

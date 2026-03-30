@@ -77,6 +77,12 @@ export default {
 			return attachment
 		},
 
+		registerAttachment({ commit }, { cardId, attachment }) {
+			commit('createAttachment', { cardId, attachment })
+			commit('cardIncreaseAttachmentCount', cardId)
+			return attachment
+		},
+
 		async updateAttachment({ commit }, { cardId, attachment, formData }) {
 			const result = await apiClient.updateAttachment({ cardId, attachment, formData })
 			commit('updateAttachment', { cardId, attachment: result })

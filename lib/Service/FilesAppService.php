@@ -14,7 +14,6 @@ use OCA\Deck\NoPermissionException;
 use OCA\Deck\Sharing\DeckShareProvider;
 use OCA\Deck\StatusException;
 use OCP\AppFramework\Http\StreamResponse;
-use OCP\Constants;
 use OCP\Files\Folder;
 use OCP\Files\IMimeTypeDetector;
 use OCP\Files\IRootFolder;
@@ -42,6 +41,7 @@ class FilesAppService implements IAttachmentService, ICustomAttachmentService {
 	private CardMapper $cardMapper;
 	private LoggerInterface $logger;
 	private IDBConnection $connection;
+	private CardFileAttachmentService $cardFileAttachmentService;
 
 	public function __construct(
 		IRequest $request,
@@ -56,6 +56,7 @@ class FilesAppService implements IAttachmentService, ICustomAttachmentService {
 		CardMapper $cardMapper,
 		LoggerInterface $logger,
 		IDBConnection $connection,
+		CardFileAttachmentService $cardFileAttachmentService,
 		?string $userId,
 	) {
 		$this->request = $request;
@@ -71,6 +72,7 @@ class FilesAppService implements IAttachmentService, ICustomAttachmentService {
 		$this->cardMapper = $cardMapper;
 		$this->logger = $logger;
 		$this->connection = $connection;
+		$this->cardFileAttachmentService = $cardFileAttachmentService;
 	}
 
 	public function listAttachments(int $cardId): array {
@@ -207,16 +209,13 @@ class FilesAppService implements IAttachmentService, ICustomAttachmentService {
             fclose($content);
         }
 
-        $share = $this->shareManager->newShare();
-        $share->setNode($targetFile);
-        $share->setShareType(ISHARE::TYPE_DECK);
-        $share->setSharedWith((string)$attachment->getCardId());
-        $share->setPermissions(Constants::PERMISSION_READ);
-        $share->setSharedBy($this->userId);
-        $share = $this->shareManager->createShare($share);
-
-        $attachment->setId((int)$share->getId());
-        $attachment->setData($targetFile->getName());
+		$createdAttachment = $this->cardFileAttachmentService->attachExistingFileToCard(
+			(int) $attachment->getCardId(),
+			$targetFile,
+			(string) $this->userId,
+		);
+		$attachment->setId($createdAttachment->getId());
+		$attachment->setData($createdAttachment->getData());
     }
 
 	/**
