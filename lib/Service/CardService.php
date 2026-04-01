@@ -291,15 +291,16 @@ class CardService
 			throw new StatusException('Operation not allowed. This board is archived.');
 		}
 		$card = $this->cardMapper->find($id);
-			$beforeStackId = (int) $card->getStackId();
-			$toStackId = (int) $stackId;
-			$boardIdForPolicy = (int) ($this->cardMapper->findBoardId((int) $id) ?? 0);
-			$policyEnabled = $boardIdForPolicy > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardIdForPolicy);
-			$approvedStackId = $policyEnabled ? (int) ($this->cardPolicyService->getApprovedStackId($boardIdForPolicy) ?? 0) : 0;
-			$doneStackId = $policyEnabled ? (int) ($this->cardPolicyService->getDoneStackId($boardIdForPolicy) ?? 0) : 0;
-			$actorId = (string) ($this->userId ?? '');
-			$triggerDoneActivity = false;
-			$triggerUndoneActivity = false;
+		$beforeStackId = (int) $card->getStackId();
+		$toStackId = (int) $stackId;
+		$boardIdForPolicy = (int) ($this->cardMapper->findBoardId((int) $id) ?? 0);
+		$isProjectLinkedBoard = $this->isProjectLinkedBoard($boardIdForPolicy);
+		$policyEnabled = $boardIdForPolicy > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardIdForPolicy);
+		$approvedStackId = $policyEnabled ? (int) ($this->cardPolicyService->getApprovedStackId($boardIdForPolicy) ?? 0) : 0;
+		$doneStackId = $policyEnabled ? (int) ($this->cardPolicyService->getDoneStackId($boardIdForPolicy) ?? 0) : 0;
+		$actorId = (string) ($this->userId ?? '');
+		$triggerDoneActivity = false;
+		$triggerUndoneActivity = false;
 		if ($archived !== null && $card->getArchived() && $archived === true) {
 			throw new StatusException('Operation not allowed. This card is archived.');
 		}
@@ -348,30 +349,37 @@ class CardService
 		if ($archived !== null) {
 			$card->setArchived($archived);
 		}
-			if ($policyEnabled) {
-				// Keep done state in sync with Done transitions
-				if ($beforeStackId !== $toStackId && $doneStackId > 0) {
-					if ($toStackId === $doneStackId && $card->getDone() === null) {
-						$card->setDone(new \DateTime());
-						$triggerDoneActivity = true;
-					}
-					if ($beforeStackId === $doneStackId && $toStackId !== $doneStackId && $card->getDone() !== null) {
-						$card->setDone(null);
-						$triggerUndoneActivity = true;
-					}
+		if ($done !== null && $isProjectLinkedBoard) {
+			if ($this->isExplicitDoneChange($card, $done)) {
+				throw new StatusException('Operation not allowed. On project-linked boards, move the card between stacks to change done state.');
+			}
+			// Ignore unchanged done values from generic update payloads.
+			$done = null;
+		}
+		if ($policyEnabled) {
+			// Keep done state in sync with Done transitions
+			if ($beforeStackId !== $toStackId && $doneStackId > 0) {
+				if ($toStackId === $doneStackId && $card->getDone() === null) {
+					$card->setDone(new \DateTime());
+					$triggerDoneActivity = true;
 				}
+				if ($beforeStackId === $doneStackId && $toStackId !== $doneStackId && $card->getDone() !== null) {
+					$card->setDone(null);
+					$triggerUndoneActivity = true;
+				}
+			}
 
-				// Explicit done changes: verify-only and only in Done
-				if ($done !== null) {
-					if ($actorId === '' || $doneStackId <= 0) {
-						throw new NoPermissionException('Operation not allowed.');
-					}
-					$this->cardPolicyService->assertUserAllowedForAction($boardIdForPolicy, (int) $id, CardPolicyService::ACTION_VERIFY, $actorId);
-					if ((int) $card->getStackId() !== $doneStackId) {
-						throw new StatusException('Operation not allowed. Move the card to Done to change done state.');
-					}
-					$card->setDone($done->getValue());
+			// Explicit done changes: verify-only and only in Done
+			if ($done !== null) {
+				if ($actorId === '' || $doneStackId <= 0) {
+					throw new NoPermissionException('Operation not allowed.');
 				}
+				$this->cardPolicyService->assertUserAllowedForAction($boardIdForPolicy, (int) $id, CardPolicyService::ACTION_VERIFY, $actorId);
+				if ((int) $card->getStackId() !== $doneStackId) {
+					throw new StatusException('Operation not allowed. Move the card to Done to change done state.');
+				}
+				$card->setDone($done->getValue());
+			}
 		} else {
 			// Legacy behavior: only update done when explicitly provided
 			if ($done !== null) {
@@ -705,28 +713,31 @@ class CardService
 		}
 		$card = $this->cardMapper->find($id);
 		$boardId = (int) ($this->cardMapper->findBoardId($id) ?? 0);
+		if ($this->isProjectLinkedBoard($boardId)) {
+			throw new StatusException('Operation not allowed. On project-linked boards, move the card to the Done stack to mark it as done.');
+		}
 		$actorId = (string) ($this->userId ?? '');
 		$movedIntoDone = false;
 
-			if ($boardId > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardId)) {
-				$doneStackId = (int) ($this->cardPolicyService->getDoneStackId($boardId) ?? 0);
-				if ($actorId === '' || $doneStackId <= 0) {
-					throw new NoPermissionException('Operation not allowed.');
-				}
-				$this->cardPolicyService->assertUserAllowedForAction($boardId, $id, CardPolicyService::ACTION_VERIFY, $actorId);
-				if ((int) $card->getStackId() !== $doneStackId) {
-					$targetOrder = count($this->cardMapper->findAll($doneStackId));
-					$this->reorder($id, $doneStackId, $targetOrder);
-					$movedIntoDone = true;
-					$card = $this->cardMapper->find($id);
-				}
+		if ($boardId > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardId)) {
+			$doneStackId = (int) ($this->cardPolicyService->getDoneStackId($boardId) ?? 0);
+			if ($actorId === '' || $doneStackId <= 0) {
+				throw new NoPermissionException('Operation not allowed.');
 			}
+			$this->cardPolicyService->assertUserAllowedForAction($boardId, $id, CardPolicyService::ACTION_VERIFY, $actorId);
+			if ((int) $card->getStackId() !== $doneStackId) {
+				$targetOrder = count($this->cardMapper->findAll($doneStackId));
+				$this->reorder($id, $doneStackId, $targetOrder);
+				$movedIntoDone = true;
+				$card = $this->cardMapper->find($id);
+			}
+		}
 
 		if ($card->getDone() === null) {
 			$card->setDone(new \DateTime());
 			$card = $this->cardMapper->update($card);
 			$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_CARD, $card, ActivityManager::SUBJECT_CARD_UPDATE_DONE);
-			} elseif (!$movedIntoDone) {
+		} elseif (!$movedIntoDone) {
 			// Keep legacy behavior: still emit done activity for explicit done calls
 			$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_CARD, $card, ActivityManager::SUBJECT_CARD_UPDATE_DONE);
 		}
@@ -752,19 +763,22 @@ class CardService
 		if ($this->boardService->isArchived($this->cardMapper, $id)) {
 			throw new StatusException('Operation not allowed. This board is archived.');
 		}
-			$card = $this->cardMapper->find($id);
-			$boardId = (int) ($this->cardMapper->findBoardId($id) ?? 0);
-			$actorId = (string) ($this->userId ?? '');
-			if ($boardId > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardId)) {
-				$doneStackId = (int) ($this->cardPolicyService->getDoneStackId($boardId) ?? 0);
-				if ($actorId === '' || $doneStackId <= 0) {
-					throw new NoPermissionException('Operation not allowed.');
-				}
-				$this->cardPolicyService->assertUserAllowedForAction($boardId, $id, CardPolicyService::ACTION_VERIFY, $actorId);
-				if ((int) $card->getStackId() === $doneStackId) {
-					throw new StatusException('Operation not allowed. Move the card out of Done to revoke approval.');
-				}
+		$card = $this->cardMapper->find($id);
+		$boardId = (int) ($this->cardMapper->findBoardId($id) ?? 0);
+		if ($this->isProjectLinkedBoard($boardId)) {
+			throw new StatusException('Operation not allowed. On project-linked boards, move the card out of the Done stack to mark it as not done.');
+		}
+		$actorId = (string) ($this->userId ?? '');
+		if ($boardId > 0 && $this->cardPolicyService->isCardPolicyEnabled($boardId)) {
+			$doneStackId = (int) ($this->cardPolicyService->getDoneStackId($boardId) ?? 0);
+			if ($actorId === '' || $doneStackId <= 0) {
+				throw new NoPermissionException('Operation not allowed.');
 			}
+			$this->cardPolicyService->assertUserAllowedForAction($boardId, $id, CardPolicyService::ACTION_VERIFY, $actorId);
+			if ((int) $card->getStackId() === $doneStackId) {
+				throw new StatusException('Operation not allowed. Move the card out of Done to revoke approval.');
+			}
+		}
 		$card->setDone(null);
 		$newCard = $this->cardMapper->update($card);
 		$this->activityManager->triggerEvent(ActivityManager::DECK_OBJECT_CARD, $newCard, ActivityManager::SUBJECT_CARD_UPDATE_UNDONE);
@@ -773,6 +787,52 @@ class CardService
 		$this->eventDispatcher->dispatchTyped(new CardUpdatedEvent($card));
 
 		return $newCard;
+	}
+
+	private function isProjectLinkedBoard(int $boardId): bool
+	{
+		if ($boardId <= 0) {
+			return false;
+		}
+
+		try {
+			return $this->projectMapper->findByBoardId($boardId) instanceof Project;
+		} catch (\Throwable $e) {
+			return false;
+		}
+	}
+
+	private function isExplicitDoneChange(Card $card, OptionalNullableValue $done): bool
+	{
+		$currentDone = $this->normalizeDoneTimestamp($card->getDone());
+		$requestedDoneRaw = $done->getValue();
+		if ($requestedDoneRaw === null) {
+			return $currentDone !== null;
+		}
+
+		$requestedDone = $this->normalizeDoneTimestamp($requestedDoneRaw);
+		if ($requestedDone === null) {
+			return true;
+		}
+
+		return $requestedDone !== $currentDone;
+	}
+
+	private function normalizeDoneTimestamp(mixed $value): ?int
+	{
+		if ($value instanceof \DateTimeInterface) {
+			return $value->getTimestamp();
+		}
+
+		if (is_string($value) && trim($value) !== '') {
+			try {
+				return (new \DateTime($value))->getTimestamp();
+			} catch (\Throwable $e) {
+				return null;
+			}
+		}
+
+		return null;
 	}
 
 	/**

@@ -27,7 +27,7 @@
 			@click="unassignCardFromMe()">
 			{{ t('deck', 'Unassign myself') }}
 		</NcActionButton>
-		<NcActionButton v-if="canEdit"
+		<NcActionButton v-if="canToggleDone"
 			icon="icon-checkmark"
 			:close-after-click="true"
 			@click="changeCardDoneStatus()">
@@ -110,12 +110,18 @@ export default {
 		canEdit() {
 			return !this.card.archived
 		},
+		canToggleDone() {
+			return this.canEdit && !this.isProjectLinkedCard
+		},
 		canEditBoard() {
 			if (this.currentBoard) {
 				return this.$store.getters.canEdit
 			}
 			const board = this.$store.getters.boards.find((item) => item.id === this.card.boardId)
 			return !!board?.permissions?.PERMISSION_EDIT
+		},
+		isProjectLinkedCard() {
+			return Boolean(this.card?.project)
 		},
 		isCurrentUserAssigned() {
 			return this.card.assignedUsers.find((item) => item.type === 0 && item.participant.uid === getCurrentUser()?.uid)
@@ -156,6 +162,9 @@ export default {
 			}
 		},
 		changeCardDoneStatus() {
+			if (!this.canToggleDone) {
+				return
+			}
 			this.$store.dispatch('changeCardDoneStatus', { ...this.card, done: !this.card.done })
 		},
 		archiveUnarchiveCard() {

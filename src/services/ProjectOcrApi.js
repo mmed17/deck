@@ -76,6 +76,16 @@ export class ProjectOcrApi {
 		return response?.data ?? null
 	}
 
+	async finalizeCardAttachment(projectId, cardId, processingId, fields) {
+		const response = await axios.post(generateUrl(`/apps/projectcreatoraio/api/v1/projects/${projectId}/cards/${cardId}/ocr/attachments/finalize`), {
+			processing_id: processingId,
+			fields,
+		}, {
+			headers: this.headers(),
+		})
+		return response?.data ?? null
+	}
+
 	async reprocessFileProcessing(projectId, fileId) {
 		const response = await axios.post(generateUrl(`/apps/projectcreatoraio/api/v1/projects/${projectId}/files/${fileId}/ocr/reprocess`), {}, {
 			headers: this.headers(),

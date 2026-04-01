@@ -47,7 +47,7 @@
 				</NcActionButton>
 			</NcActions>
 
-			<NcButton v-if="!card.done"
+			<NcButton v-if="!card.done && canToggleDone"
 				type="secondary"
 				class="completed-button"
 				@click="changeCardDoneStatus()">
@@ -68,7 +68,7 @@
 				</span>
 			</div>
 			<div class="due-actions">
-				<NcButton v-if="!card.archived"
+				<NcButton v-if="!card.archived && canToggleDone"
 					type="tertiary"
 					:name="t('deck', 'Not done')"
 					@click="changeCardDoneStatus()">
@@ -155,6 +155,12 @@ export default defineComponent({
 		}
 	},
 	computed: {
+		canToggleDone() {
+			return !this.isProjectLinkedCard
+		},
+		isProjectLinkedCard() {
+			return Boolean(this.card?.project)
+		},
 		duedate: {
 			get() {
 				return this.card?.duedate ? new Date(this.card.duedate) : null
@@ -231,6 +237,9 @@ export default defineComponent({
 			return momentObject?.minute(0).second(0).millisecond(0).toDate() || null
 		},
 		changeCardDoneStatus() {
+			if (!this.canToggleDone) {
+				return
+			}
 			this.$store.dispatch('changeCardDoneStatus', { ...this.card, done: !this.card.done })
 		},
 		archiveUnarchiveCard() {

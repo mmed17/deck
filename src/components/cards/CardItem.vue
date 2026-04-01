@@ -203,6 +203,12 @@ export default {
 			}
 			return this.hasBadges
 		},
+		canToggleDone() {
+			return !this.isProjectLinkedCard
+		},
+		isProjectLinkedCard() {
+			return Boolean(this.card?.project)
+		},
 		cardClasses() {
 			return {
 				compact: this.compactMode,
@@ -304,7 +310,9 @@ export default {
 				this.$store.dispatch('archiveUnarchiveCard', { ...this.card, archived: !this.card.archived })
 				break
 			case 'KeyO':
-				this.$store.dispatch('changeCardDoneStatus', { ...this.card, done: !this.card.done })
+				if (this.canToggleDone) {
+					this.$store.dispatch('changeCardDoneStatus', { ...this.card, done: !this.card.done })
+				}
 				break
 			case 'KeyM':
 				this.$el.querySelector('button.action-item__menutoggle')?.click()

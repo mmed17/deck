@@ -294,6 +294,7 @@ export default {
 			processingLoadingByFileId: {},
 			assigningByFileId: {},
 			feedbackByFileId: {},
+			pendingAttachmentByFileId: {},
 			activeExtractedFileId: null,
 			activeExtractedDraft: {},
 			savingExtractedFileId: null,
@@ -370,7 +371,7 @@ export default {
 
 			const attachment = this.attachments.find((entry) => this.attachmentFileId(entry) === Number(this.activeExtractedFileId))
 			if (!attachment) {
-				return ''
+				return this.pendingAttachmentByFileId[String(this.activeExtractedFileId)]?.fileName || ''
 			}
 
 			const base = this.attachmentBasename(attachment)
@@ -427,6 +428,7 @@ export default {
 			this.processingLoadingByFileId = {}
 			this.assigningByFileId = {}
 			this.feedbackByFileId = {}
+			this.pendingAttachmentByFileId = {}
 			this.activeExtractedFileId = null
 			this.activeExtractedDraft = {}
 			this.savingExtractedFileId = null
@@ -842,12 +844,23 @@ export default {
 				const fileId = this.attachmentFileId(attachment)
 				if (fileId > 0 && payload?.processing) {
 					this.$set(this.processingByFileId, String(fileId), payload.processing)
+					this.$delete(this.pendingAttachmentByFileId, String(fileId))
 				}
 				return attachment
 			} catch (error) {
 				const payload = error?.response?.data ?? {}
 				const missingFields = Array.isArray(payload?.missing_fields) ? payload.missing_fields : []
 				const message = payload?.message || error?.response?.data?.message || 'Failed to upload file'
+				const processing = payload?.processing ?? null
+				const stagedFileId = Number(processing?.file_id ?? 0)
+				if (stagedFileId > 0 && processing) {
+					this.$set(this.processingByFileId, String(stagedFileId), processing)
+					this.$set(this.pendingAttachmentByFileId, String(stagedFileId), {
+						processingId: Number(processing?.id ?? 0),
+						fileName: String(processing?.file_name || file.name || ''),
+					})
+					this.openExtractedDataModal(stagedFileId)
+				}
 				showError(missingFields.length > 0 ? `${message} (${missingFields.join(', ')})` : message)
 				return null
 			} finally {
@@ -943,13 +956,34 @@ export default {
 			const key = String(fileId)
 			this.$delete(this.feedbackByFileId, key)
 			try {
-				const payload = await projectOcrApi.updateFileExtractedFields(projectId, fileId, this.activeExtractedDraft)
+				const pendingAttachment = this.pendingAttachmentByFileId[key] || null
+				const payload = pendingAttachment?.processingId
+					? await projectOcrApi.finalizeCardAttachment(projectId, this.cardId, pendingAttachment.processingId, this.activeExtractedDraft)
+					: await projectOcrApi.updateFileExtractedFields(projectId, fileId, this.activeExtractedDraft)
+				if (payload?.processing) {
+					const nextFileId = Number(payload.processing?.file_id ?? fileId)
+					if (pendingAttachment?.processingId && payload?.attachment) {
+						this.$store.dispatch('registerAttachment', { cardId: this.cardId, attachment: payload.attachment })
+						if (nextFileId > 0 && nextFileId !== fileId) {
+							this.$delete(this.processingByFileId, key)
+							this.$delete(this.pendingAttachmentByFileId, key)
+							this.$set(this.processingByFileId, String(nextFileId), payload.processing)
+						} else {
+							this.$set(this.processingByFileId, key, payload.processing)
+							this.$delete(this.pendingAttachmentByFileId, key)
+						}
+						this.closeExtractedDataModal()
+					} else {
+						this.$set(this.processingByFileId, key, payload.processing)
+					}
+				}
+				this.$set(this.feedbackByFileId, String(payload?.processing?.file_id ?? fileId), payload?.attachment ? 'Attachment created.' : 'Extracted fields saved.')
+			} catch (error) {
+				const payload = error?.response?.data ?? {}
 				if (payload?.processing) {
 					this.$set(this.processingByFileId, key, payload.processing)
 				}
-				this.$set(this.feedbackByFileId, key, 'Extracted fields saved.')
-			} catch (error) {
-				this.$set(this.feedbackByFileId, key, error?.response?.data?.message || 'Could not save extracted fields.')
+				this.$set(this.feedbackByFileId, key, payload?.message || 'Could not save extracted fields.')
 			} finally {
 				this.savingExtractedFileId = null
 			}

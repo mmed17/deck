@@ -340,6 +340,9 @@ export default {
 			commit('updateCard', updatedCard)
 		},
 		async changeCardDoneStatus({ commit }, card) {
+			if (card?.project) {
+				return
+			}
 			let call = 'markCardAsDone'
 			if (card.done === false) {
 				call = 'markCardAsUndone'
