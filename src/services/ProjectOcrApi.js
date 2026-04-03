@@ -59,9 +59,10 @@ export class ProjectOcrApi {
 		return response?.data ?? null
 	}
 
-	async uploadCardAttachment(projectId, cardId, documentTypeId, file, onUploadProgress) {
+	async uploadCardAttachment(projectId, cardId, documentTypeId, file, onUploadProgress, storageScope = 'shared') {
 		const bodyFormData = new FormData()
 		bodyFormData.append('document_type_id', String(documentTypeId))
+		bodyFormData.append('storage_scope', String(storageScope || 'shared'))
 		bodyFormData.append('file', file)
 		const response = await axios.post(
 			generateUrl(`/apps/projectcreatoraio/api/v1/projects/${projectId}/cards/${cardId}/ocr/attachments`),

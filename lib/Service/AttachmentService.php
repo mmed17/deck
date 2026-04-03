@@ -77,6 +77,7 @@ class AttachmentService {
 		// TODO: move this to a plugin based approach once we have different types of attachments
 		$this->registerAttachmentService('deck_file', FileService::class);
 		$this->registerAttachmentService('file', FilesAppService::class);
+		$this->registerAttachmentService('project_private_file', ProjectPrivateFileService::class);
 	}
 
 	/**
@@ -151,18 +152,12 @@ class AttachmentService {
 			throw new BadRequestException('card id must be a number');
 		}
 
-		$count = $this->attachmentCacheHelper->getAttachmentCount((int)$cardId);
-		if ($count === null) {
-			$count = count($this->attachmentMapper->findAll($cardId));
-
-			foreach (array_keys($this->services) as $attachmentType) {
-				$service = $this->getService($attachmentType);
-				if ($service instanceof ICustomAttachmentService) {
-					$count += $service->getAttachmentCount((int)$cardId);
-				}
+		$count = count($this->attachmentMapper->findAll($cardId));
+		foreach (array_keys($this->services) as $attachmentType) {
+			$service = $this->getService($attachmentType);
+			if ($service instanceof ICustomAttachmentService) {
+				$count += $service->getAttachmentCount((int)$cardId);
 			}
-
-			$this->attachmentCacheHelper->setAttachmentCount((int)$cardId, $count);
 		}
 
 		return $count;

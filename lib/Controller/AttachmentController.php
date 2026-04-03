@@ -63,9 +63,14 @@ class AttachmentController extends Controller {
 	 */
 	public function create($cardId) {
 		$projectFolderPath = null;
+		$type = (string) $this->request->getParam('type');
+		$storageScope = strtolower(trim((string) $this->request->getParam('storage_scope', 'shared')));
+		if (!in_array($storageScope, ['shared', 'private'], true)) {
+			$storageScope = 'shared';
+		}
 		$project = $this->projectMapper->findByCardId($cardId);
 		
-		if ($project !== null && $project->getFolderPath() !== null) {
+		if ($project !== null && $project->getFolderPath() !== null && $type === 'file' && $storageScope === 'shared') {
 			$folderName = basename($project->getFolderPath());
 			$card = $this->cardMapper->find((int)$cardId, false);
 			$cardFolderName = $this->toSafeFolderName((string)$card->getTitle());
@@ -75,9 +80,13 @@ class AttachmentController extends Controller {
 			$projectFolderPath = $folderName . '/Scrumban/' . $cardFolderName;
 		}
 
+		if ($project !== null && $type === 'file' && $storageScope === 'private') {
+			$type = 'project_private_file';
+		}
+
 		return $this->attachmentService->create(
 			$cardId,
-			$this->request->getParam('type'),
+			$type,
 			$this->request->getParam('data'),
 			$projectFolderPath
 		);

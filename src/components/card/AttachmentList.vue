@@ -72,7 +72,7 @@
 							class="attachment__ocr-icon-btn"
 							:title="t('deck', 'View Extracted Data')"
 							@click="openExtractedDataModal(attachmentFileId(attachment))">
-							<EyeOutline :size="16" />
+							<ScanSearchIcon :size="16" />
 						</button>
 						<button v-if="canReprocess(attachmentFileId(attachment))"
 							type="button"
@@ -133,6 +133,21 @@
 					</option>
 					<option v-for="type in documentTypes" :key="`upload-doc-type-${type.id}`" :value="String(type.id)">
 						{{ type.name }}
+					</option>
+				</select>
+				<label class="attachment__upload-modal-label" for="attachment-upload-scope">
+					{{ t('deck', 'Storage scope') }}
+				</label>
+				<select
+					id="attachment-upload-scope"
+					v-model="uploadStorageScope"
+					class="attachment__upload-type-select"
+					:disabled="uploadBusy">
+					<option value="shared">
+						{{ t('deck', 'Shared files') }}
+					</option>
+					<option value="private">
+						{{ t('deck', 'Private files') }}
 					</option>
 				</select>
 				<div class="attachment__upload-modal-row">
@@ -219,10 +234,10 @@ import { getFilePickerBuilder, showError } from '@nextcloud/dialogs'
 import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
 import CheckCircleOutline from 'vue-material-design-icons/CheckCircleOutline.vue'
 import ClockOutline from 'vue-material-design-icons/ClockOutline.vue'
-import EyeOutline from 'vue-material-design-icons/EyeOutline.vue'
 import FileQuestionOutline from 'vue-material-design-icons/FileQuestionOutline.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import Sync from 'vue-material-design-icons/Sync.vue'
+import ScanSearchIcon from '../icons/ScanSearchIcon.vue'
 import { ProjectOcrApi } from '../../services/ProjectOcrApi.js'
 
 const maxUploadSizeState = loadState('deck', 'maxUploadSize', -1)
@@ -249,7 +264,6 @@ export default {
 		AttachmentDragAndDrop,
 		CheckCircleOutline,
 		ClockOutline,
-		EyeOutline,
 		FileQuestionOutline,
 		NcActions,
 		NcActionButton,
@@ -258,6 +272,7 @@ export default {
 		NcLoadingIcon,
 		NcModal,
 		Refresh,
+		ScanSearchIcon,
 		Sync,
 	},
 	mixins: [relativeDate, attachmentUpload],
@@ -300,6 +315,7 @@ export default {
 			savingExtractedFileId: null,
 			showUploadModal: false,
 			uploadDocumentTypeId: '',
+			uploadStorageScope: 'shared',
 			selectedUploadFiles: [],
 			uploadBusy: false,
 		}
@@ -434,6 +450,7 @@ export default {
 			this.savingExtractedFileId = null
 			this.showUploadModal = false
 			this.uploadDocumentTypeId = ''
+			this.uploadStorageScope = 'shared'
 			this.selectedUploadFiles = []
 			this.uploadBusy = false
 		},
@@ -780,6 +797,7 @@ export default {
 				return
 			}
 			this.showUploadModal = false
+			this.uploadStorageScope = 'shared'
 			this.selectedUploadFiles = []
 		},
 		async uploadSelectedFiles() {
@@ -795,7 +813,7 @@ export default {
 			this.uploadBusy = true
 			try {
 				for (const file of this.selectedUploadFiles) {
-					const attachment = await this.uploadCardAttachmentWithOcr(file, documentTypeId)
+					const attachment = await this.uploadCardAttachmentWithOcr(file, documentTypeId, this.uploadStorageScope)
 					if (!attachment) {
 						continue
 					}
@@ -806,10 +824,10 @@ export default {
 				this.uploadBusy = false
 			}
 		},
-		async uploadCardAttachmentWithOcr(file, documentTypeId) {
+		async uploadCardAttachmentWithOcr(file, documentTypeId, storageScope = 'shared') {
 			const projectId = Number(this.projectId)
 			if (!Number.isFinite(projectId) || projectId <= 0) {
-				const attachment = await this.onLocalAttachmentSelected(file, 'file')
+				const attachment = await this.onLocalAttachmentSelected(file, 'file', storageScope)
 				if (attachment) {
 					await this.assignUploadedAttachmentDocumentType(attachment, documentTypeId)
 				}
@@ -835,6 +853,7 @@ export default {
 						const percentCompleted = Math.round((e.loaded * 100) / e.total)
 						this.$set(this.uploadQueue[file.name], 'progress', percentCompleted)
 					},
+					storageScope,
 				)
 				const attachment = payload?.attachment ?? null
 				if (!attachment) {
@@ -1000,6 +1019,7 @@ export default {
 			if (this.isReadOnly || this.uploadBusy) {
 				return
 			}
+			this.uploadStorageScope = 'shared'
 			this.selectedUploadFiles = []
 			this.showUploadModal = true
 		},

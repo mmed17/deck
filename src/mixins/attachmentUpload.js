@@ -16,7 +16,7 @@ export default {
 		}
 	},
 	methods: {
-		async onLocalAttachmentSelected(file, type) {
+		async onLocalAttachmentSelected(file, type, storageScope = 'shared') {
 			if (this.maxUploadSize > 0 && file.size > this.maxUploadSize) {
 				showError(
 					t('deck', 'Failed to upload {name}', { name: file.name }) + ' - '
@@ -29,6 +29,7 @@ export default {
 			const bodyFormData = new FormData()
 			bodyFormData.append('cardId', this.cardId)
 			bodyFormData.append('type', type)
+			bodyFormData.append('storage_scope', storageScope)
 			bodyFormData.append('file', file)
 			return queue.add(async () => {
 				try {
