@@ -46,16 +46,6 @@
 					{{ t('deck', 'Remove due date') }}
 				</NcActionButton>
 			</NcActions>
-
-			<NcButton v-if="!card.done && canToggleDone"
-				type="secondary"
-				class="completed-button"
-				@click="changeCardDoneStatus()">
-				<template #icon>
-					<CheckIcon :size="20" />
-				</template>
-				{{ t('deck', 'Mark as done') }}
-			</NcButton>
 		</template>
 		<template v-else>
 			<div class="done-info">
@@ -67,22 +57,6 @@
 					{{ formatReadableDate(duedate) }}
 				</span>
 			</div>
-			<div class="due-actions">
-				<NcButton v-if="!card.archived && canToggleDone"
-					type="tertiary"
-					:name="t('deck', 'Not done')"
-					@click="changeCardDoneStatus()">
-					<template #icon>
-						<ClearIcon :size="20" />
-					</template>
-				</NcButton>
-				<NcButton type="secondary" @click="archiveUnarchiveCard()">
-					<template #icon>
-						<ArchiveIcon :size="20" />
-					</template>
-					{{ card.archived ? t('deck', 'Unarchive card') : t('deck', 'Archive card') }}
-				</NcButton>
-			</div>
 		</template>
 	</CardDetailEntry>
 </template>
@@ -93,31 +67,23 @@ import {
 	NcActionButton,
 	NcActions,
 	NcActionSeparator,
-	NcButton,
 	NcDateTimePickerNative,
 } from '@nextcloud/vue'
 import readableDate from '../../mixins/readableDate.js'
 import { getDayNamesMin, getFirstDay, getMonthNamesShort } from '@nextcloud/l10n'
 import moment from '@nextcloud/moment'
-import ArchiveIcon from 'vue-material-design-icons/Archive.vue'
 import Plus from 'vue-material-design-icons/Plus.vue'
 import Calendar from 'vue-material-design-icons/Calendar.vue'
 import CalendarCheck from 'vue-material-design-icons/CalendarCheck.vue'
-import CheckIcon from 'vue-material-design-icons/Check.vue'
-import ClearIcon from 'vue-material-design-icons/Close.vue'
 import CardDetailEntry from './CardDetailEntry.vue'
 
 export default defineComponent({
 	name: 'DueDateSelector',
 	components: {
-		NcButton,
-		ArchiveIcon,
-		ClearIcon,
 		CardDetailEntry,
 		Plus,
 		Calendar,
 		CalendarCheck,
-		CheckIcon,
 		NcActions,
 		NcActionButton,
 		NcActionSeparator,
@@ -155,12 +121,6 @@ export default defineComponent({
 		}
 	},
 	computed: {
-		canToggleDone() {
-			return !this.isProjectLinkedCard
-		},
-		isProjectLinkedCard() {
-			return Boolean(this.card?.project)
-		},
 		duedate: {
 			get() {
 				return this.card?.duedate ? new Date(this.card.duedate) : null
@@ -236,15 +196,6 @@ export default defineComponent({
 		getTimestamp(momentObject) {
 			return momentObject?.minute(0).second(0).millisecond(0).toDate() || null
 		},
-		changeCardDoneStatus() {
-			if (!this.canToggleDone) {
-				return
-			}
-			this.$store.dispatch('changeCardDoneStatus', { ...this.card, done: !this.card.done })
-		},
-		archiveUnarchiveCard() {
-			this.$store.dispatch('archiveUnarchiveCard', { ...this.card, archived: !this.card.archived })
-		},
 	},
 })
 </script>
@@ -261,12 +212,4 @@ export default defineComponent({
 	}
 }
 
-.completed-button {
-	margin-left: auto;
-}
-
-.due-actions {
-	display: flex;
-	align-items: flex-start;
-}
 </style>

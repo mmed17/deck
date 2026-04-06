@@ -280,7 +280,6 @@ describe('Card', function () {
 
 			cy.get(`.card:contains("${newCardTitle}")`).find('[data-due-state="Now"]').should('be.visible').should('contain', '21 hours')
 
-
 			// Remove the due date again
 			cy.get('#app-sidebar-vue [data-cy-due-date-actions]').should('be.visible').click()
 			// tick needed to show the popover menu
@@ -326,13 +325,11 @@ describe('Card', function () {
 			})
 		})
 
-		it('Custom card actions', () => {
+		it('hides removed card menu actions', () => {
 			const myAction = {
 				label: 'Test action',
 				icon: 'icon-user',
-				callback(card) {
-					console.log('Called callback', card)
-				},
+				callback() {},
 			}
 			cy.spy(myAction, 'callback').as('myAction.callback')
 
@@ -345,41 +342,35 @@ describe('Card', function () {
 				.find('.ProseMirror h1').contains('Hello world').should('be.visible')
 
 			cy.get('.app-sidebar-header .action-item__menutoggle').click()
-			cy.get('.v-popper__popper button:contains("Test action")').click()
-
-			cy.get('@myAction.callback')
-				.should('be.called')
-				.its('firstCall.args.0')
-				.as('args')
-
-			cy.url().then(url => {
-				const cardId = url.split('/').pop()
-				cy.get('@args').should('have.property', 'name', 'Hello world')
-				cy.get('@args').should('have.property', 'stackname', 'TestList')
-				cy.get('@args').should('have.property', 'boardname', 'MyTestBoard')
-				cy.get('@args').its('link').then((url) => {
-					expect(url.split('/').pop() === cardId).to.be.true
-					cy.visit(url)
-					cy.get('#app-sidebar-vue')
-						.find('.ProseMirror h1').contains('Hello world').should('be.visible')
-				})
+			cy.get('.v-popper__popper').within(() => {
+				cy.contains('button', 'Card details').should('be.visible')
+				cy.contains('button', 'Edit title').should('be.visible')
+				cy.contains('button', 'Assign to me').should('not.exist')
+				cy.contains('button', 'Unassign myself').should('not.exist')
+				cy.contains('button', 'Mark as done').should('not.exist')
+				cy.contains('button', 'Mark as not done').should('not.exist')
+				cy.contains('button', 'Move/copy card').should('not.exist')
+				cy.contains('button', 'Archive card').should('not.exist')
+				cy.contains('button', 'Unarchive card').should('not.exist')
+				cy.contains('button', 'Delete card').should('not.exist')
+				cy.contains('button', 'Test action').should('not.exist')
 			})
+
+			cy.get('@myAction.callback').should('not.have.been.called')
 		})
 
-		it('clone card', () => {
-			cy.intercept({ method: 'POST', url: '**/apps/deck/**/cards/*/clone' }).as('clone')
+		it('keeps assignment selector and hides done/archive actions in details', () => {
 			cy.get('.card:contains("Hello world")').should('be.visible').click()
 			cy.get('#app-sidebar-vue')
 				.find('.ProseMirror h1').contains('Hello world').should('be.visible')
 
-			cy.get('.app-sidebar-header .action-item__menutoggle').click()
-			cy.get('.v-popper__popper button:contains("Move/copy card")').click()
-			cy.get('.vs__dropdown-menu span[title="MyTestBoard"]').should('be.visible').click()
-			cy.get('[data-cy="select-stack"] .vs__dropdown-toggle').should('be.visible').click()
-			cy.get('.vs__dropdown-menu span[title="TestList"]').should('be.visible').click()
-			cy.get('.modal-container button:contains("Copy card")').click()
-			cy.wait('@clone', { timeout: 7000 })
-			cy.get('.card:contains("Hello world")').should('have.length', 2)
+			cy.get('[data-test="assignment-selector"]').should('be.visible')
+			cy.get('[data-test="due-date-selector"]').within(() => {
+				cy.contains('button', 'Mark as done').should('not.exist')
+				cy.contains('button', 'Not done').should('not.exist')
+				cy.contains('button', 'Archive card').should('not.exist')
+				cy.contains('button', 'Unarchive card').should('not.exist')
+			})
 		})
 	})
 })
