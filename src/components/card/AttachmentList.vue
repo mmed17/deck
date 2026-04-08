@@ -4,16 +4,34 @@
 -->
 
 <template>
-	<AttachmentDragAndDrop
-		:card-id="cardId"
+	<AttachmentDragAndDrop :card-id="cardId"
 		:defer-upload="true"
 		class="drop-upload--sidebar"
 		@files-dropped="openUploadModalForFiles">
+		<div v-if="storageTabsEnabled"
+			class="attachment-tabs"
+			role="tablist"
+			:aria-label="t('deck', 'Attachment storage')">
+			<button type="button"
+				class="attachment-tab"
+				:class="{ 'attachment-tab--active': activeStorageTab === 'shared' }"
+				@click="activeStorageTab = 'shared'">
+				{{ t('deck', 'Shared files') }}
+			</button>
+			<button type="button"
+				class="attachment-tab"
+				:class="{ 'attachment-tab--active': activeStorageTab === 'private' }"
+				@click="activeStorageTab = 'private'">
+				{{ t('deck', 'Private files') }}
+			</button>
+		</div>
 		<div v-if="!isReadOnly" class="button-group">
 			<NcButton class="icon-upload" @click="uploadNewFile()">
 				{{ t('deck', 'Upload new files') }}
 			</NcButton>
-			<NcButton class="icon-folder" @click="shareFromFiles()">
+			<NcButton v-if="showShareFromFilesAction"
+				class="icon-folder"
+				@click="shareFromFiles()">
 				{{ t('deck', 'Share from Files') }}
 			</NcButton>
 		</div>
@@ -35,8 +53,8 @@
 					</a>
 				</div>
 			</li>
-			<li v-for="attachment in attachments"
-				:key="attachment.id"
+			<li v-for="attachment in visibleAttachments"
+				:key="`${attachment.type}:${attachment.id}`"
 				class="attachment"
 				:class="{ 'attachment--deleted': attachment.deletedAt > 0 }">
 				<a class="fileicon"
@@ -114,6 +132,9 @@
 				</NcActions>
 			</li>
 		</ul>
+		<div v-if="visibleAttachments.length === 0 && Object.keys(uploadQueue).length === 0" class="attachment-empty-state">
+			{{ emptyStateText }}
+		</div>
 
 		<NcModal v-if="showUploadModal" :title="t('deck', 'Upload files')" @close="closeUploadModal">
 			<div class="attachment__upload-modal">
@@ -123,8 +144,7 @@
 				<label class="attachment__upload-modal-label" for="attachment-upload-type">
 					{{ t('deck', 'Document type') }}
 				</label>
-				<select
-					id="attachment-upload-type"
+				<select id="attachment-upload-type"
 					v-model="uploadDocumentTypeId"
 					class="attachment__upload-type-select"
 					:disabled="documentTypesLoading || documentTypes.length === 0 || uploadBusy">
@@ -135,21 +155,22 @@
 						{{ type.name }}
 					</option>
 				</select>
-				<label class="attachment__upload-modal-label" for="attachment-upload-scope">
-					{{ t('deck', 'Storage scope') }}
-				</label>
-				<select
-					id="attachment-upload-scope"
-					v-model="uploadStorageScope"
-					class="attachment__upload-type-select"
-					:disabled="uploadBusy">
-					<option value="shared">
-						{{ t('deck', 'Shared files') }}
-					</option>
-					<option value="private">
-						{{ t('deck', 'Private files') }}
-					</option>
-				</select>
+				<template v-if="!storageTabsEnabled">
+					<label class="attachment__upload-modal-label" for="attachment-upload-scope">
+						{{ t('deck', 'Storage scope') }}
+					</label>
+					<select id="attachment-upload-scope"
+						v-model="uploadStorageScope"
+						class="attachment__upload-type-select"
+						:disabled="uploadBusy">
+						<option value="shared">
+							{{ t('deck', 'Shared files') }}
+						</option>
+						<option value="private">
+							{{ t('deck', 'Private files') }}
+						</option>
+					</select>
+				</template>
 				<div class="attachment__upload-modal-row">
 					<NcButton :disabled="uploadBusy" @click="$refs.filesAttachment?.click?.()">
 						{{ t('deck', 'Choose files') }}
@@ -161,20 +182,18 @@
 					</span>
 				</div>
 				<ul v-if="selectedUploadFiles.length > 0" class="attachment__upload-file-list">
-					<li
-						v-for="file in selectedUploadFiles"
-						:key="`upload-file-${file.name}-${file.size}`"
+					<li v-for="selectedFile in selectedUploadFiles"
+						:key="`upload-file-${selectedFile.name}-${selectedFile.size}`"
 						class="attachment__upload-file-item">
-						<span>{{ file.name }}</span>
-						<span>{{ formattedFileSize(file.size) }}</span>
+						<span>{{ selectedFile.name }}</span>
+						<span>{{ formattedFileSize(selectedFile.size) }}</span>
 					</li>
 				</ul>
 				<div class="attachment__ocr-actions attachment__ocr-actions--upload">
 					<NcButton :disabled="uploadBusy" @click="closeUploadModal">
 						{{ t('deck', 'Cancel') }}
 					</NcButton>
-					<NcButton
-						:disabled="uploadBusy || !uploadDocumentTypeId || selectedUploadFiles.length === 0"
+					<NcButton :disabled="uploadBusy || !uploadDocumentTypeId || selectedUploadFiles.length === 0"
 						@click="uploadSelectedFiles">
 						{{ uploadBusy ? t('deck', 'Uploading...') : t('deck', 'Upload and process') }}
 					</NcButton>
@@ -292,6 +311,11 @@ export default {
 			required: false,
 			default: false,
 		},
+		storageTabsEnabled: {
+			type: Boolean,
+			required: false,
+			default: false,
+		},
 	},
 	data() {
 		return {
@@ -316,6 +340,7 @@ export default {
 			showUploadModal: false,
 			uploadDocumentTypeId: '',
 			uploadStorageScope: 'shared',
+			activeStorageTab: 'shared',
 			selectedUploadFiles: [],
 			uploadBusy: false,
 		}
@@ -324,6 +349,28 @@ export default {
 		attachments() {
 			// FIXME sort propertly by last modified / deleted at
 			return [...this.$store.getters.attachmentsByCard(this.cardId)].filter(attachment => attachment.deletedAt >= 0).sort((a, b) => b.id - a.id)
+		},
+		visibleAttachments() {
+			if (!this.storageTabsEnabled) {
+				return this.attachments
+			}
+
+			return this.attachments.filter((attachment) => this.attachmentStorageScope(attachment) === this.activeStorageTab)
+		},
+		showShareFromFilesAction() {
+			return !this.storageTabsEnabled || this.activeStorageTab === 'shared'
+		},
+		effectiveUploadStorageScope() {
+			return this.storageTabsEnabled ? this.activeStorageTab : this.uploadStorageScope
+		},
+		emptyStateText() {
+			if (this.storageTabsEnabled) {
+				return this.activeStorageTab === 'private'
+					? t('deck', 'No private files attached yet.')
+					: t('deck', 'No shared files attached yet.')
+			}
+
+			return t('deck', 'No attachments yet.')
 		},
 		mimetypeForAttachment() {
 			return (attachment) => {
@@ -425,6 +472,15 @@ export default {
 				this.queueVisibleProcessingLoad()
 			},
 		},
+		storageTabsEnabled: {
+			immediate: true,
+			handler(enabled) {
+				if (!enabled) {
+					this.activeStorageTab = 'shared'
+				}
+				this.uploadStorageScope = this.defaultUploadStorageScope()
+			},
+		},
 		boardId: {
 			immediate: true,
 			handler() {
@@ -450,7 +506,8 @@ export default {
 			this.savingExtractedFileId = null
 			this.showUploadModal = false
 			this.uploadDocumentTypeId = ''
-			this.uploadStorageScope = 'shared'
+			this.uploadStorageScope = this.defaultUploadStorageScope()
+			this.activeStorageTab = 'shared'
 			this.selectedUploadFiles = []
 			this.uploadBusy = false
 		},
@@ -468,6 +525,12 @@ export default {
 				return 0
 			}
 			return id
+		},
+		attachmentStorageScope(attachment) {
+			return attachment?.type === 'project_private_file' ? 'private' : 'shared'
+		},
+		defaultUploadStorageScope() {
+			return this.storageTabsEnabled ? this.activeStorageTab : 'shared'
 		},
 		showOcrForAttachment(attachment) {
 			if (!this.canUseOcr) {
@@ -789,6 +852,7 @@ export default {
 			if (this.isReadOnly || this.uploadBusy) {
 				return
 			}
+			this.uploadStorageScope = this.defaultUploadStorageScope()
 			this.selectedUploadFiles = Array.isArray(files) ? files.filter(Boolean) : []
 			this.showUploadModal = true
 		},
@@ -797,7 +861,7 @@ export default {
 				return
 			}
 			this.showUploadModal = false
-			this.uploadStorageScope = 'shared'
+			this.uploadStorageScope = this.defaultUploadStorageScope()
 			this.selectedUploadFiles = []
 		},
 		async uploadSelectedFiles() {
@@ -813,7 +877,7 @@ export default {
 			this.uploadBusy = true
 			try {
 				for (const file of this.selectedUploadFiles) {
-					const attachment = await this.uploadCardAttachmentWithOcr(file, documentTypeId, this.uploadStorageScope)
+					const attachment = await this.uploadCardAttachmentWithOcr(file, documentTypeId, this.effectiveUploadStorageScope)
 					if (!attachment) {
 						continue
 					}
@@ -1019,7 +1083,7 @@ export default {
 			if (this.isReadOnly || this.uploadBusy) {
 				return
 			}
-			this.uploadStorageScope = 'shared'
+			this.uploadStorageScope = this.defaultUploadStorageScope()
 			this.selectedUploadFiles = []
 			this.showUploadModal = true
 		},
@@ -1081,6 +1145,33 @@ export default {
 			margin-bottom: 12px;
 			text-align: left;
 		}
+	}
+
+	.attachment-tabs {
+		display: flex;
+		gap: 8px;
+		margin-bottom: 12px;
+	}
+
+	.attachment-tab {
+		appearance: none;
+		border: 1px solid var(--color-border-maxcontrast);
+		background: var(--color-main-background);
+		color: var(--color-main-text);
+		border-radius: 999px;
+		padding: 8px 12px;
+		font-weight: 700;
+		cursor: pointer;
+		transition: background-color 0.15s ease, border-color 0.15s ease;
+	}
+
+	.attachment-tab:hover {
+		background: var(--color-background-hover);
+	}
+
+	.attachment-tab--active {
+		border-color: var(--color-primary-element);
+		box-shadow: 0 0 0 2px rgba(0, 130, 201, 0.15);
 	}
 
 	.attachment-list {
@@ -1167,6 +1258,11 @@ export default {
 				margin-top: 3px;
 			}
 		}
+	}
+
+	.attachment-empty-state {
+		padding: 12px 0;
+		color: var(--color-text-maxcontrast);
 	}
 
 	.attachment__ocr {

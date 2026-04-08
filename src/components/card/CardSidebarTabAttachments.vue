@@ -6,6 +6,7 @@
 <template>
 	<AttachmentList :card-id="card.id"
 		:removable="true"
+		:storage-tabs-enabled="Boolean(card && card.project)"
 		@delete-attachment="deleteAttachment"
 		@restore-attachment="restoreAttachment" />
 </template>
