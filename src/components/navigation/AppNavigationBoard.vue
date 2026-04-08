@@ -8,6 +8,7 @@
 		:loading="loading"
 		:to="routeTo"
 		:undo="deleted"
+		:menu-open.sync="menuOpen"
 		:menu-placement="'auto'"
 		:force-display-actions="isTouchDevice"
 		@click="onNavigate"
@@ -21,7 +22,7 @@
 			<AccountIcon v-if="board.acl.length > 0" />
 		</template>
 
-		<template v-if="!deleted" slot="actions">
+		<template v-if="!deleted && !shouldHideBoardActions" slot="actions">
 			<template v-if="!isDueSubmenuActive">
 				<NcActionButton icon="icon-info"
 					:close-after-click="true"
@@ -160,9 +161,12 @@ import { loadState } from '@nextcloud/initial-state'
 import { emit } from '@nextcloud/event-bus'
 
 import isTouchDevice from '../../mixins/isTouchDevice.js'
+import { ProjectService } from '../../services/ProjectService.js'
 import BoardCloneModal from './BoardCloneModal.vue'
 
 const canCreateState = loadState('deck', 'canCreate')
+const projectService = new ProjectService()
+const combiBoardCache = new Map()
 
 export default {
 	name: 'AppNavigationBoard',
@@ -207,6 +211,8 @@ export default {
 			updateDueSetting: null,
 			canCreate: canCreateState,
 			cloneModalOpen: false,
+			isCombiBoardResolved: false,
+			isCombiBoard: false,
 		}
 	},
 	computed: {
@@ -227,6 +233,27 @@ export default {
 		},
 		canManage() {
 			return this.board.permissions.PERMISSION_MANAGE
+		},
+		currentBoardId() {
+			return Number(this.$store.state.currentBoard?.id)
+		},
+		isCurrentBoardCombiProject() {
+			return this.$store.getters.isCurrentBoardCombiProject
+		},
+		isCurrentBoardEntry() {
+			const boardId = Number(this.board?.id)
+			return Number.isFinite(boardId) && boardId === this.currentBoardId
+		},
+		shouldHideBoardActions() {
+			if (this.isCurrentBoardEntry) {
+				return Boolean(this.isCurrentBoardCombiProject)
+			}
+
+			if (this.isCombiBoardResolved) {
+				return this.isCombiBoard
+			}
+
+			return false
 		},
 		dueDateReminderIcon() {
 			if (this.board.settings['notify-due'] === 'all') {
@@ -249,7 +276,19 @@ export default {
 			return ''
 		},
 	},
-	watch: {},
+	watch: {
+		menuOpen(isOpen) {
+			if (isOpen) {
+				this.resolveCombiBoardVisibility()
+			}
+		},
+		'board.id': {
+			immediate: true,
+			handler() {
+				this.hydrateCombiStateFromCache()
+			},
+		},
+	},
 	mounted() {
 		// prevent click outside event with popupItem.
 		this.popupItem = this.$el
@@ -264,6 +303,61 @@ export default {
 		},
 		updateColor(newColor) {
 			this.editColor = newColor
+		},
+		hydrateCombiStateFromCache() {
+			const boardId = Number(this.board?.id)
+			if (!Number.isFinite(boardId) || boardId <= 0) {
+				this.isCombiBoardResolved = false
+				this.isCombiBoard = false
+				return
+			}
+
+			if (combiBoardCache.has(boardId)) {
+				this.isCombiBoardResolved = true
+				this.isCombiBoard = combiBoardCache.get(boardId)
+				return
+			}
+
+			this.isCombiBoardResolved = false
+			this.isCombiBoard = false
+		},
+		async resolveCombiBoardVisibility() {
+			if (this.isCurrentBoardEntry || this.isCombiBoardResolved) {
+				return
+			}
+
+			const boardId = Number(this.board?.id)
+			if (!Number.isFinite(boardId) || boardId <= 0) {
+				return
+			}
+
+			if (combiBoardCache.has(boardId)) {
+				this.isCombiBoardResolved = true
+				this.isCombiBoard = combiBoardCache.get(boardId)
+				return
+			}
+
+			try {
+				const project = await projectService.getProjectByBoardId(boardId)
+				const isCombiBoard = Number(project?.type) === 0
+				combiBoardCache.set(boardId, isCombiBoard)
+
+				if (Number(this.board?.id) === boardId) {
+					this.isCombiBoardResolved = true
+					this.isCombiBoard = isCombiBoard
+				}
+			} catch (error) {
+				if (error?.response?.status === 404) {
+					combiBoardCache.set(boardId, false)
+					if (Number(this.board?.id) === boardId) {
+						this.isCombiBoardResolved = true
+						this.isCombiBoard = false
+					}
+					return
+				}
+
+				console.debug('Could not resolve board project context', error)
+			}
 		},
 		actionEdit() {
 			this.editTitle = this.board.title

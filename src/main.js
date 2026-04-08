@@ -11,9 +11,9 @@ import { translate, translatePlural } from '@nextcloud/l10n'
 import { showError } from '@nextcloud/dialogs'
 import { subscribe } from '@nextcloud/event-bus'
 import ClickOutside from 'vue-click-outside'
-import './shared-init.js';
-import './models/index.js';
-import './sessions.js';
+import './shared-init.js'
+import './models/index.js'
+import './sessions.js'
 
 // the server snap.js conflicts with vertical scrolling so we disable it
 document.body.setAttribute('data-snap-ignore', 'true')
@@ -117,12 +117,16 @@ if (!window.OCA.Deck) {
  * action. The card parameter will be of the format of a rich object string
  * type "deck-card"
  * @param {string} icon the action label. E.g. "icon-reply"
+ * @param {string} [source] source app identifier. Use "talk" for Nextcloud Talk.
+ * @param {string} [id] stable action identifier. E.g. "talk:post-to-conversation"
  */
-window.OCA.Deck.registerCardAction = ({ label, callback, icon }) => {
+window.OCA.Deck.registerCardAction = ({ label, callback, icon, source, id }) => {
 	const cardAction = {
 		label,
 		callback,
 		icon,
+		source,
+		id,
 	}
 	store.dispatch('addCardAction', cardAction)
 }

@@ -15,11 +15,19 @@
 			</template>
 			{{ t('deck', 'Edit title') }}
 		</NcActionButton>
+		<NcActionButton v-for="action in visibleCardActions"
+			:key="action.id || action.label"
+			:close-after-click="true"
+			:icon="action.icon"
+			@click="action.callback(cardRichObject)">
+			{{ action.label }}
+		</NcActionButton>
 	</div>
 </template>
 <script>
 import { NcActionButton } from '@nextcloud/vue'
-import { mapState } from 'vuex'
+import { mapGetters, mapState } from 'vuex'
+import { generateUrl } from '@nextcloud/router'
 import CardBulletedIcon from 'vue-material-design-icons/CardBulleted.vue'
 import PencilIcon from 'vue-material-design-icons/Pencil.vue'
 
@@ -46,11 +54,31 @@ export default {
 		}
 	},
 	computed: {
+		...mapGetters([
+			'cardActions',
+			'stackById',
+			'boardById',
+		]),
 		...mapState({
 			currentBoard: state => state.currentBoard,
 		}),
 		canEdit() {
 			return !this.card.archived
+		},
+		boardId() {
+			return this.card?.boardId ? this.card.boardId : Number(this.$route.params.id)
+		},
+		cardRichObject() {
+			return {
+				id: '' + this.card.id,
+				name: this.card.title,
+				boardname: this.boardById(this.boardId)?.title,
+				stackname: this.stackById(this.card.stackId)?.title,
+				link: window.location.protocol + '//' + window.location.host + generateUrl('/apps/deck/') + `card/${this.card.id}`,
+			}
+		},
+		visibleCardActions() {
+			return this.cardActions.filter((action) => this.isAllowedCardAction(action))
 		},
 	},
 	methods: {
@@ -66,6 +94,26 @@ export default {
 		},
 		editTitle() {
 			this.$emit('edit-title', this.card.id)
+		},
+		isAllowedCardAction(action) {
+			const source = (action?.source ?? '').toLowerCase()
+			const id = (action?.id ?? '').toLowerCase()
+
+			// Preferred controlled contract for integrations
+			if (source === 'talk' || source === 'spreed') {
+				return true
+			}
+			if (id.startsWith('talk:') || id.startsWith('spreed:')) {
+				return true
+			}
+
+			// Backward-compatible fallback for legacy Talk registrations that
+			// don't provide source/id metadata.
+			const icon = (action?.icon ?? '').toLowerCase()
+			const label = (action?.label ?? '').toLowerCase()
+			const talkLikeIcon = icon.includes('talk')
+			const talkLikeLabel = label.includes('conversation') || label.includes('chat') || label.includes('post to')
+			return talkLikeIcon || talkLikeLabel
 		},
 	},
 }
