@@ -43,7 +43,7 @@
 					@blur="$store.dispatch('toggleShortcutLock', false)"
 					@input="$store.commit('setSearchQuery', $event.target.value)">
 			</div>
-			<div v-if="board && canManage && !showArchived && !board.archived"
+			<div v-if="board && canManage && !showArchived && !board.archived && !isCombiProject"
 				id="stack-add"
 				v-click-outside="hideAddStack">
 				<NcActions v-if="!isAddStackVisible">
@@ -325,6 +325,7 @@ export default {
 		...mapGetters([
 			'canEdit',
 			'canManage',
+			'isCurrentBoardCombiProject',
 		]),
 		...mapState({
 			isFullApp: state => state.isFullApp,
@@ -347,6 +348,9 @@ export default {
 			if (!this.board) return []
 			// get user object including displayname from the list of all users with acces
 			return this.board.users.filter((user) => this.board.activeSessions.includes(user.uid))
+		},
+		isCombiProject() {
+			return this.isCurrentBoardCombiProject
 		},
 	},
 	watch: {
@@ -408,6 +412,9 @@ export default {
 			this.showArchived = !this.showArchived
 		},
 		addNewStack() {
+			if (this.isCombiProject) {
+				return
+			}
 			this.stack = { title: this.newStackTitle }
 			this.$store.dispatch('createStack', this.stack)
 			this.newStackTitle = ''
@@ -415,6 +422,9 @@ export default {
 			this.isAddStackVisible = false
 		},
 		showAddStack() {
+			if (this.isCombiProject) {
+				return
+			}
 			this.isAddStackVisible = true
 		},
 		hideAddStack() {

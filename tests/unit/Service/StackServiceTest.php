@@ -35,7 +35,10 @@ use OCA\Deck\Db\LabelMapper;
 use OCA\Deck\Db\Stack;
 use OCA\Deck\Db\StackMapper;
 use OCA\Deck\Model\CardDetails;
+use OCA\Deck\NoPermissionException;
 use OCA\Deck\Validators\StackServiceValidator;
+use OCA\ProjectCreatorAIO\Db\Project;
+use OCA\ProjectCreatorAIO\Db\ProjectMapper;
 use OCP\EventDispatcher\IEventDispatcher;
 use Psr\Log\LoggerInterface;
 use Test\TestCase;
@@ -78,6 +81,8 @@ class StackServiceTest extends TestCase {
 	private $eventDispatcher;
 	/** @var StackServiceValidator|\PHPUnit\Framework\MockObject\MockObject */
 	private $stackServiceValidator;
+	/** @var ProjectMapper|\PHPUnit\Framework\MockObject\MockObject */
+	private $projectMapper;
 
 	public function setUp(): void {
 		parent::setUp();
@@ -95,6 +100,7 @@ class StackServiceTest extends TestCase {
 		$this->logger = $this->createMock(LoggerInterface::class);
 		$this->eventDispatcher = $this->createMock(IEventDispatcher::class);
 		$this->stackServiceValidator = $this->createMock(StackServiceValidator::class);
+		$this->projectMapper = $this->createMock(ProjectMapper::class);
 
 		$this->stackService = new StackService(
 			$this->stackMapper,
@@ -110,7 +116,8 @@ class StackServiceTest extends TestCase {
 			$this->changeHelper,
 			$this->logger,
 			$this->eventDispatcher,
-			$this->stackServiceValidator
+			$this->stackServiceValidator,
+			$this->projectMapper
 		);
 	}
 
@@ -219,6 +226,10 @@ class StackServiceTest extends TestCase {
 
 	public function testCreate() {
 		$this->permissionService->expects($this->once())->method('checkPermission');
+		$this->projectMapper->expects($this->once())
+			->method('findByBoardId')
+			->with(2)
+			->willReturn(null);
 		$stack = new Stack();
 		$stack->setId(123);
 		$stack->setTitle('Foo');
@@ -229,11 +240,27 @@ class StackServiceTest extends TestCase {
 		$this->assertEquals($stack, $result);
 	}
 
+	public function testCreateRejectsCombiProjectBoards(): void {
+		$this->expectException(NoPermissionException::class);
+		$this->permissionService->expects($this->once())->method('checkPermission');
+		$this->projectMapper->expects($this->once())
+			->method('findByBoardId')
+			->with(2)
+			->willReturn($this->createProject(0));
+		$this->stackMapper->expects($this->never())->method('insert');
+
+		$this->stackService->create('Foo', 2, 1);
+	}
+
 	public function testDelete() {
 		$this->permissionService->expects($this->once())->method('checkPermission');
 		$stackToBeDeleted = new Stack();
 		$stackToBeDeleted->setId(1);
 		$stackToBeDeleted->setBoardId(1);
+		$this->projectMapper->expects($this->once())
+			->method('findByBoardId')
+			->with(1)
+			->willReturn(null);
 		$this->stackMapper->expects($this->once())->method('find')->willReturn($stackToBeDeleted);
 		$this->stackMapper->expects($this->once())->method('update')->willReturn($stackToBeDeleted);
 		$this->cardMapper->expects($this->once())->method('findAll')->willReturn([]);
@@ -242,8 +269,28 @@ class StackServiceTest extends TestCase {
 		$this->assertTrue($stackToBeDeleted->getDeletedAt() > 0, 'deletedAt is set');
 	}
 
+	public function testDeleteRejectsCombiProjectBoards(): void {
+		$this->expectException(NoPermissionException::class);
+		$this->permissionService->expects($this->once())->method('checkPermission');
+		$stack = new Stack();
+		$stack->setId(123);
+		$stack->setBoardId(1);
+		$this->stackMapper->expects($this->once())->method('find')->with(123)->willReturn($stack);
+		$this->projectMapper->expects($this->once())
+			->method('findByBoardId')
+			->with(1)
+			->willReturn($this->createProject(0));
+		$this->stackMapper->expects($this->never())->method('update');
+
+		$this->stackService->delete(123);
+	}
+
 	public function testUpdate() {
 		$this->permissionService->expects($this->exactly(2))->method('checkPermission');
+		$this->projectMapper->expects($this->once())
+			->method('findByBoardId')
+			->with(2)
+			->willReturn(null);
 		$stack = new Stack();
 		$this->stackMapper->expects($this->once())->method('find')->willReturn($stack);
 		$this->stackMapper->expects($this->once())->method('update')->willReturn($stack);
@@ -253,6 +300,18 @@ class StackServiceTest extends TestCase {
 		$stack->setOrder(1);
 		$result = $this->stackService->update(123, 'Foo', 2, 1, null);
 		$this->assertEquals($stack, $result);
+	}
+
+	public function testUpdateRejectsCombiProjectBoards(): void {
+		$this->expectException(NoPermissionException::class);
+		$this->permissionService->expects($this->exactly(2))->method('checkPermission');
+		$this->projectMapper->expects($this->once())
+			->method('findByBoardId')
+			->with(2)
+			->willReturn($this->createProject(0));
+		$this->stackMapper->expects($this->never())->method('find');
+
+		$this->stackService->update(123, 'Foo', 2, 1, null);
 	}
 
 	/**
@@ -268,6 +327,10 @@ class StackServiceTest extends TestCase {
 			->method('find')
 			->with(1)
 			->willReturn($a);
+		$this->projectMapper->expects($this->once())
+			->method('findByBoardId')
+			->with(1)
+			->willReturn(null);
 		$this->stackMapper->expects($this->once())
 			->method('findAll')
 			->willReturn($stacks);
@@ -279,11 +342,34 @@ class StackServiceTest extends TestCase {
 		$this->assertEquals($expected, $actual);
 	}
 
+	public function testReorderRejectsCombiProjectBoards(): void {
+		$this->expectException(NoPermissionException::class);
+		$this->permissionService->expects($this->once())->method('checkPermission');
+		$stack = $this->createStack(1, 0);
+		$this->stackMapper->expects($this->once())
+			->method('find')
+			->with(1)
+			->willReturn($stack);
+		$this->projectMapper->expects($this->once())
+			->method('findByBoardId')
+			->with(1)
+			->willReturn($this->createProject(0));
+		$this->stackMapper->expects($this->never())->method('findAll');
+
+		$this->stackService->reorder(1, 2);
+	}
+
 	private function createStack($id, $order) {
 		$stack = new Stack();
 		$stack->setId($id);
 		$stack->setBoardId(1);
 		$stack->setOrder($order);
 		return $stack;
+	}
+
+	private function createProject(int $type): Project {
+		$project = new Project();
+		$project->setType($type);
+		return $project;
 	}
 }

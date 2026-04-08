@@ -51,7 +51,7 @@
                 <NcEmptyContent v-else-if="isEmpty" key="empty">
                     <template #icon><DeckIcon /></template>
                     <template #name>{{ t('deck', 'No lists available') }}</template>
-                    <template v-if="canManage" #action>
+                    <template v-if="canManage && !isCombiProject" #action>
                         {{ t('deck', 'Create a new list to add cards to this board') }}
                         <form @submit.prevent="addNewStack()">
                             <NcTextField ref="newStackInput"
@@ -229,8 +229,6 @@ export default {
             // Assignment modal
             showAssignmentModal: false,
             selectedAssignee: null,
-			// Organization ID for external integrations
-			organizationId: null,
 		}
 	},
     computed: {
@@ -239,12 +237,15 @@ export default {
             board: state => state.currentBoard,
             showArchived: state => state.showArchived,
         }),
-        ...mapGetters(['canEdit', 'canManage', 'isSelectionMode', 'selectedCardIds', 'assignables']),
+        ...mapGetters(['canEdit', 'canManage', 'isSelectionMode', 'selectedCardIds', 'assignables', 'isCurrentBoardCombiProject']),
         stacksByBoard() {
             return this.board?.id ? this.$store.getters.stacksByBoard(this.board.id) : []
         },
+        isCombiProject() {
+            return this.isCurrentBoardCombiProject
+        },
         dragHandleSelector() {
-            return this.canEdit ? '.stack__title' : '.no-drag'
+            return this.canEdit && !this.isCombiProject ? '.stack__title' : '.no-drag'
         },
         isEmpty() {
             return this.stacksByBoard.length === 0
@@ -296,8 +297,6 @@ export default {
         },
         async fetchData() {
             this.loading = true
-            // Reset organizationId when loading new board data
-            this.organizationId = null
             try {
                 await this.$store.dispatch('loadBoardById', this.id)
                 await this.$store.dispatch('loadStacks', this.id)
@@ -316,25 +315,17 @@ export default {
             } finally {
                 this.loading = false
             }
-            this.fetchOrganizationId()
-        },
-        async fetchOrganizationId() {
-            try {
-                const url = OC.generateUrl('/apps/projectcreatoraio/api/v1/projects/board/' + this.id)
-                const response = await fetch(url)
-                if (response.ok) {
-                    const project = await response.json()
-                    this.organizationId = project?.organization_id || null
-                }
-                console.debug('Fetched organizationId:', this.organizationId, 'for board:', this.id)
-            } catch (e) {
-                console.debug('Could not fetch organization ID for board:', e)
-            }
         },
         onDropStack({ removedIndex, addedIndex }) {
+            if (this.isCombiProject) {
+                return
+            }
             this.$store.dispatch('orderStack', { stack: this.stacksByBoard[removedIndex], removedIndex, addedIndex })
         },
         addNewStack() {
+            if (this.isCombiProject) {
+                return
+            }
             const newStack = { title: this.newStackTitle, boardId: this.id }
             this.$store.dispatch('createStack', newStack)
             this.newStackTitle = ''

@@ -11,7 +11,7 @@
 			:style="{ '--stack-color': stackColor }"
 			:aria-label="stack.title">
 			<transition name="fade" mode="out-in">
-				<h3 v-if="!canManage || isArchived" tabindex="0">
+				<h3 v-if="!canManage || isArchived || isCombiProject" tabindex="0">
 					{{ stack.title }}
 				</h3>
 				<h3 v-else-if="!editing"
@@ -59,7 +59,7 @@
 					</template>
 					{{ t('deck', 'Unarchive all cards') }}
 				</NcActionButton>
-				<NcActionButton icon="icon-delete" @click="deleteStack(stack)">
+				<NcActionButton v-if="!isCombiProject" icon="icon-delete" @click="deleteStack(stack)">
 					{{ t('deck', 'Delete list') }}
 				</NcActionButton>
 			</NcActions>
@@ -244,6 +244,7 @@ export default {
 			'assignables',
 			'isSelectionMode',
 			'selectedCardIds',
+			'isCurrentBoardCombiProject',
 		]),
 		...mapState({
 			showArchived: state => state.showArchived,
@@ -255,6 +256,9 @@ export default {
 				}
 				return !card.archived
 			})
+		},
+		isCombiProject() {
+			return this.isCurrentBoardCombiProject
 		},
 		stackColor() {
 			// Color mapping based on stack title for the workflow stages
@@ -274,7 +278,7 @@ export default {
 			return colorMap[this.stack?.title] || '#0082c9'
 		},
 		dragHandleSelector() {
-			return this.canEdit && !this.showArchived ? null : '.no-drag'
+			return this.canEdit && !this.showArchived && !this.isCombiProject ? null : '.no-drag'
 		},
 		cardDetailsInModal: {
 			get() {
@@ -357,6 +361,9 @@ export default {
 			}
 		},
 		deleteStack(stack) {
+			if (this.isCombiProject) {
+				return
+			}
 			this.$store.dispatch('deleteStack', stack)
 			showUndo(t('deck', 'List deleted'), () => this.$store.dispatch('stackUndoDelete', stack))
 		},
@@ -370,7 +377,7 @@ export default {
 			this.modalArchivAllCardsShow = false
 		},
 		startEditing(stack) {
-			if (this.dragging) {
+			if (this.dragging || this.isCombiProject) {
 				return
 			}
 
@@ -378,6 +385,10 @@ export default {
 			this.editing = true
 		},
 		finishedEdit(stack) {
+			if (this.isCombiProject) {
+				this.editing = false
+				return
+			}
 			if (this.copiedStack.title !== stack.title) {
 				this.$store.dispatch('updateStack', this.copiedStack)
 			}

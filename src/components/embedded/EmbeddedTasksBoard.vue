@@ -22,7 +22,7 @@
 				<NcEmptyContent v-else-if="isEmpty" key="empty">
 					<template #icon><DeckIcon /></template>
 					<template #name>{{ t('deck', 'No lists available') }}</template>
-					<template v-if="canManage" #action>
+					<template v-if="canManage && !isCombiProject" #action>
 						{{ t('deck', 'Create a new list to add cards to this board') }}
 						<form @submit.prevent="addNewStack()">
 							<NcTextField ref="newStackInput"
@@ -171,12 +171,15 @@ export default {
 			board: state => state.currentBoard,
 			showArchived: state => state.showArchived,
 		}),
-		...mapGetters(['canEdit', 'canManage', 'isSelectionMode', 'selectedCardIds', 'assignables']),
+		...mapGetters(['canEdit', 'canManage', 'isSelectionMode', 'selectedCardIds', 'assignables', 'isCurrentBoardCombiProject']),
 		stacksByBoard() {
 			return this.board?.id ? this.$store.getters.stacksByBoard(this.board.id) : []
 		},
+		isCombiProject() {
+			return this.isCurrentBoardCombiProject
+		},
 		dragHandleSelector() {
-			return this.canEdit ? '.stack__title' : '.no-drag'
+			return this.canEdit && !this.isCombiProject ? '.stack__title' : '.no-drag'
 		},
 		isEmpty() {
 			return this.stacksByBoard.length === 0
@@ -239,9 +242,15 @@ export default {
 			}
 		},
 		onDropStack({ removedIndex, addedIndex }) {
+			if (this.isCombiProject) {
+				return
+			}
 			this.$store.dispatch('orderStack', { stack: this.stacksByBoard[removedIndex], removedIndex, addedIndex })
 		},
 		addNewStack() {
+			if (this.isCombiProject) {
+				return
+			}
 			const newStack = { title: this.newStackTitle, boardId: this.boardId }
 			this.$store.dispatch('createStack', newStack)
 			this.newStackTitle = ''

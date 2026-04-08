@@ -24,6 +24,7 @@ use OCA\Deck\Model\CardDetails;
 use OCA\Deck\NoPermissionException;
 use OCA\Deck\StatusException;
 use OCA\Deck\Validators\StackServiceValidator;
+use OCA\ProjectCreatorAIO\Db\ProjectMapper;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Server;
 use Psr\Log\LoggerInterface;
@@ -45,6 +46,7 @@ class StackService {
 	private LoggerInterface $logger;
 	private IEventDispatcher $eventDispatcher;
 	private StackServiceValidator $stackServiceValidator;
+	private ?ProjectMapper $projectMapper;
 
 	public function __construct(
 		StackMapper $stackMapper,
@@ -61,6 +63,7 @@ class StackService {
 		LoggerInterface $logger,
 		IEventDispatcher $eventDispatcher,
 		StackServiceValidator $stackServiceValidator,
+		?ProjectMapper $projectMapper = null,
 		?CardPolicyService $cardPolicyService = null,
 		?string $userId = null,
 	) {
@@ -80,6 +83,18 @@ class StackService {
 		$this->logger = $logger;
 		$this->eventDispatcher = $eventDispatcher;
 		$this->stackServiceValidator = $stackServiceValidator;
+		$this->projectMapper = $projectMapper;
+	}
+
+	private function assertStacksMutableForBoard(int $boardId): void {
+		if ($boardId <= 0 || !$this->projectMapper instanceof ProjectMapper) {
+			return;
+		}
+
+		$project = $this->projectMapper->findByBoardId($boardId);
+		if ($project !== null && (int) $project->getType() === 0) {
+			throw new NoPermissionException('Stacks are fixed for combi project boards.');
+		}
 	}
 
 	private function enrichStackWithCards($userId, $stack, $since = -1) {
@@ -284,6 +299,7 @@ class StackService {
 		if ($this->boardService->isArchived(null, $boardId)) {
 			throw new StatusException('Operation not allowed. This board is archived.');
 		}
+		$this->assertStacksMutableForBoard((int) $boardId);
 		$stack = new Stack();
 		$stack->setTitle($title);
 		$stack->setBoardId($boardId);
@@ -315,6 +331,7 @@ class StackService {
 		$this->permissionService->checkPermission($this->stackMapper, $id, Acl::PERMISSION_MANAGE);
 
 		$stack = $this->stackMapper->find($id);
+		$this->assertStacksMutableForBoard((int) $stack->getBoardId());
 		$stack->setDeletedAt(time());
 		$stack = $this->stackMapper->update($stack);
 
@@ -351,6 +368,7 @@ class StackService {
 		if ($this->boardService->isArchived($this->stackMapper, $id)) {
 			throw new StatusException('Operation not allowed. This board is archived.');
 		}
+		$this->assertStacksMutableForBoard((int) $boardId);
 
 		$stack = $this->stackMapper->find($id);
 		$changes = new ChangeSet($stack);
@@ -384,6 +402,7 @@ class StackService {
 
 		$this->permissionService->checkPermission($this->stackMapper, $id, Acl::PERMISSION_MANAGE);
 		$stackToSort = $this->stackMapper->find($id);
+		$this->assertStacksMutableForBoard((int) $stackToSort->getBoardId());
 		$stacks = $this->stackMapper->findAll($stackToSort->getBoardId());
 		usort($stacks, static fn (Stack $stackA, Stack $stackB) => $stackA->getOrder() - $stackB->getOrder());
 		$result = [];

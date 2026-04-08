@@ -11,6 +11,7 @@ import Vuex from 'vuex'
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 import { BoardApi } from '../services/BoardApi.js'
+import { ProjectService } from '../services/ProjectService.js'
 import actions from './actions.js'
 import stack from './stack.js'
 import card from './card.js'
@@ -21,6 +22,7 @@ import overview from './overview.js'
 Vue.use(Vuex)
 
 const apiClient = new BoardApi()
+const projectService = new ProjectService()
 const debug = process.env.NODE_ENV !== 'production'
 
 export const BOARD_FILTERS = {
@@ -49,6 +51,7 @@ export default new Vuex.Store({
 		showCardCover: localStorage.getItem('deck.showCardCover') === 'true',
 		sidebarShown: false,
 		currentBoard: null,
+		currentBoardProject: null,
 		currentCard: null,
 		boards: loadState('deck', 'initialBoards', []),
 		sharees: [],
@@ -126,6 +129,8 @@ export default new Vuex.Store({
 		canShare: state => {
 			return state.currentBoard ? state.currentBoard.permissions.PERMISSION_SHARE : false
 		},
+		currentBoardProject: state => state.currentBoardProject,
+		isCurrentBoardCombiProject: state => Number(state.currentBoardProject?.type) === 0,
 		isArchived: state => {
 			return state.currentBoard && state.currentBoard.archived
 		},
@@ -256,6 +261,9 @@ export default new Vuex.Store({
 		setCurrentBoard(state, board) {
 			state.currentBoard = board
 		},
+		setCurrentBoardProject(state, project) {
+			state.currentBoardProject = project
+		},
 		setCurrentCard(state, card) {
 			state.currentCard = card
 		},
@@ -357,9 +365,11 @@ export default new Vuex.Store({
 			const filterReset = { tags: [], users: [], due: '' }
 			dispatch('setFilter', filterReset)
 			commit('setCurrentBoard', null)
+			commit('setCurrentBoardProject', null)
 			const board = await apiClient.loadById(boardId)
 			commit('setCurrentBoard', board)
 			commit('setAssignableUsers', board.users)
+			await dispatch('loadBoardProjectContext', boardId)
 		},
 
 		async refreshBoard({ commit, dispatch }, boardId) {
@@ -367,9 +377,21 @@ export default new Vuex.Store({
 			const etagHasChanged = board.ETag !== this.state.currentBoard.ETag
 			commit('setCurrentBoard', board)
 			commit('setAssignableUsers', board.users)
+			await dispatch('loadBoardProjectContext', boardId)
 
 			if (etagHasChanged) {
 				dispatch('loadStacks', boardId)
+			}
+		},
+		async loadBoardProjectContext({ commit }, boardId) {
+			try {
+				const project = await projectService.getProjectByBoardId(boardId)
+				commit('setCurrentBoardProject', project)
+			} catch (error) {
+				commit('setCurrentBoardProject', null)
+				if (error?.response?.status !== 404) {
+					console.debug('Could not load board project context', error)
+				}
 			}
 		},
 
