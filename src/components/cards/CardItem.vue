@@ -143,6 +143,7 @@ export default {
 		...mapGetters([
 			'isArchived',
 			'isSelectionMode',
+			'isCurrentBoardCombiProject',
 		]),
 		isSelected() {
 			return this.$store.getters.isCardSelected(this.card?.id)
@@ -221,6 +222,9 @@ export default {
 				card__selectable: this.isSelectionMode,
 			}
 		},
+		canEditTitle() {
+			return this.canEdit && !this.isCurrentBoardCombiProject
+		},
 	},
 	watch: {
 		currentCard(newValue) {
@@ -267,6 +271,9 @@ export default {
 			this.$root.$emit('open-card', this.card.id)
 		},
 		triggerEditTitle() {
+			if (!this.canEditTitle) {
+				return
+			}
 			this.editingTitle = TITLE_EDITING_STATE.PENDING
 			this.$store.dispatch('toggleShortcutLock', true)
 			setTimeout(() => {
@@ -304,6 +311,9 @@ export default {
 
 			switch (key.code) {
 			case 'KeyE':
+				if (!this.canEditTitle) {
+					return
+				}
 				this.triggerEditTitle()
 				break
 			case 'KeyA':

@@ -7,6 +7,7 @@
 
 namespace OCA\Deck\Controller;
 
+use OCA\Deck\NoPermissionException;
 use OCA\Deck\Model\OptionalNullableValue;
 use OCA\Deck\Service\AssignmentService;
 use OCA\Deck\Service\CardService;
@@ -69,7 +70,12 @@ class CardApiController extends ApiController
 	 */
 	public function create($title, $type = 'plain', $order = 999, $description = '', $duedate = null, $labels = [], $users = [])
 	{
-		$card = $this->cardService->create($title, $this->request->getParam('stackId'), $type, $order, $this->userId, $description, $duedate);
+		$stackId = (int) $this->request->getParam('stackId');
+		if ($this->cardService->isCombiProjectBoardByStackId($stackId)) {
+			throw new NoPermissionException('Cards are fixed for combi project boards.');
+		}
+
+		$card = $this->cardService->create($title, $stackId, $type, $order, $this->userId, $description, $duedate);
 
 		foreach ($labels as $labelId) {
 			$this->cardService->assignLabel($card->id, $labelId);

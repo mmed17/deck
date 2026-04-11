@@ -493,6 +493,9 @@ class CardService
 		$this->cardServiceValidator->check(compact('id', 'title'));
 
 		$this->permissionService->checkPermission($this->cardMapper, $id, Acl::PERMISSION_EDIT);
+		if ($this->isCombiProjectBoardByCardId((int) $id)) {
+			throw new StatusException('Operation not allowed. Cards are fixed for combi project boards.');
+		}
 		if ($this->boardService->isArchived($this->cardMapper, $id)) {
 			throw new StatusException('Operation not allowed. This board is archived.');
 		}
@@ -789,6 +792,26 @@ class CardService
 		return $newCard;
 	}
 
+	public function isCombiProjectBoardByStackId(int $stackId): bool
+	{
+		if ($stackId <= 0) {
+			return false;
+		}
+
+		$boardId = (int) ($this->stackMapper->findBoardId($stackId) ?? 0);
+		return $this->isCombiProjectBoard($boardId);
+	}
+
+	public function isCombiProjectBoardByCardId(int $cardId): bool
+	{
+		if ($cardId <= 0) {
+			return false;
+		}
+
+		$boardId = (int) ($this->cardMapper->findBoardId($cardId) ?? 0);
+		return $this->isCombiProjectBoard($boardId);
+	}
+
 	private function isProjectLinkedBoard(int $boardId): bool
 	{
 		if ($boardId <= 0) {
@@ -797,6 +820,20 @@ class CardService
 
 		try {
 			return $this->projectMapper->findByBoardId($boardId) instanceof Project;
+		} catch (\Throwable $e) {
+			return false;
+		}
+	}
+
+	private function isCombiProjectBoard(int $boardId): bool
+	{
+		if ($boardId <= 0) {
+			return false;
+		}
+
+		try {
+			$project = $this->projectMapper->findByBoardId($boardId);
+			return $project instanceof Project && (int) $project->getType() === 0;
 		} catch (\Throwable $e) {
 			return false;
 		}

@@ -10,7 +10,7 @@
 		:name="displayTitle"
 		:subname="subtitle"
 		:subtitle="subtitleTooltip"
-		:name-editable.sync="isEditingTitle"
+		:name-editable.sync="editableTitle"
 		@update:name="(value) => titleEditing = value"
 		@dismiss-editing="titleEditing = currentCard.title"
 		@submit-name="handleSubmitTitle"
@@ -153,7 +153,7 @@ export default {
 			isFullApp: (state) => state.isFullApp,
 			currentBoard: (state) => state.currentBoard,
 		}),
-		...mapGetters(['canEdit', 'assignables', 'cardActions', 'stackById']),
+		...mapGetters(['canEdit', 'assignables', 'cardActions', 'stackById', 'isCurrentBoardCombiProject']),
 		currentCard() {
 			return this.$store.getters.cardById(this.id)
 		},
@@ -180,6 +180,14 @@ export default {
 				return reference ? reference.openGraphObject.name : this.currentCard.title
 			},
 		},
+		editableTitle: {
+			get() {
+				return this.isCurrentBoardCombiProject ? false : this.isEditingTitle
+			},
+			set(value) {
+				this.isEditingTitle = this.isCurrentBoardCombiProject ? false : value
+			},
+		},
 	},
 	watch: {
 		currentCard() {
@@ -199,6 +207,11 @@ export default {
 			})
 		},
 		handleSubmitTitle() {
+			if (this.isCurrentBoardCombiProject) {
+				this.isEditingTitle = false
+				this.titleEditing = this.currentCard.title
+				return
+			}
 			if (this.titleEditing.trim() === '') {
 				showError(t('deck', 'The title cannot be empty.'))
 				return

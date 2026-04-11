@@ -7,6 +7,7 @@
 
 namespace OCA\Deck\Controller;
 
+use OCA\Deck\NoPermissionException;
 use OCA\Deck\Service\AssignmentService;
 use OCA\Deck\Service\CardService;
 use OCP\AppFramework\Controller;
@@ -71,6 +72,10 @@ class CardController extends Controller
 	 */
 	public function create($title, $stackId, $type = 'plain', $order = 999, string $description = '', $duedate = null, $labels = [], $users = [])
 	{
+		if ($this->cardService->isCombiProjectBoardByStackId((int) $stackId)) {
+			throw new NoPermissionException('Cards are fixed for combi project boards.');
+		}
+
 		$card = $this->cardService->create($title, $stackId, $type, $order, $this->userId, $description, $duedate);
 
 		foreach ($labels as $label) {
@@ -108,6 +113,13 @@ class CardController extends Controller
 	 */
 	public function clone(int $cardId, ?int $targetStackId = null)
 	{
+		if ($targetStackId !== null && $this->cardService->isCombiProjectBoardByStackId((int) $targetStackId)) {
+			throw new NoPermissionException('Cards are fixed for combi project boards.');
+		}
+		if ($targetStackId === null && $this->cardService->isCombiProjectBoardByCardId($cardId)) {
+			throw new NoPermissionException('Cards are fixed for combi project boards.');
+		}
+
 		return $this->cardService->cloneCard($cardId, $targetStackId);
 	}
 

@@ -376,6 +376,7 @@ class CardServiceTest extends TestCase {
 		$card = new Card();
 		$card->setTitle('title');
 		$card->setArchived(false);
+		$this->cardMapper->expects($this->once())->method('findBoardId')->with(123)->willReturn(0);
 		$this->cardMapper->expects($this->once())->method('find')->willReturn($card);
 		$this->cardMapper->expects($this->once())->method('update')->willReturnCallback(function ($c) {
 			return $c;
@@ -384,10 +385,29 @@ class CardServiceTest extends TestCase {
 		$this->assertEquals('newtitle', $actual->getTitle());
 	}
 
+	public function testRenameCombiBoardIsBlocked() {
+		$project = $this->getMockBuilder(\OCA\ProjectCreatorAIO\Db\Project::class)
+			->disableOriginalConstructor()
+			->onlyMethods(['getType'])
+			->getMock();
+		$project->expects($this->once())
+			->method('getType')
+			->willReturn(0);
+		$this->cardMapper->expects($this->once())->method('findBoardId')->with(123)->willReturn(321);
+		$this->projectMapper->expects($this->once())->method('findByBoardId')->with(321)->willReturn($project);
+		$this->cardMapper->expects($this->never())->method('find');
+		$this->cardMapper->expects($this->never())->method('update');
+
+		$this->expectException(StatusException::class);
+		$this->expectExceptionMessage('Cards are fixed for combi project boards.');
+		$this->cardService->rename(123, 'newtitle');
+	}
+
 	public function testRenameArchived() {
 		$card = new Card();
 		$card->setTitle('title');
 		$card->setArchived(true);
+		$this->cardMapper->expects($this->once())->method('findBoardId')->with(123)->willReturn(0);
 		$this->cardMapper->expects($this->once())->method('find')->willReturn($card);
 		$this->cardMapper->expects($this->never())->method('update');
 		$this->expectException(StatusException::class);

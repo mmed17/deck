@@ -63,7 +63,7 @@ export default {
 			currentBoard: state => state.currentBoard,
 		}),
 		canEdit() {
-			return !this.card.archived
+			return !this.card.archived && !this.$store.getters.isCurrentBoardCombiProject
 		},
 		boardId() {
 			return this.card?.boardId ? this.card.boardId : Number(this.$route.params.id)

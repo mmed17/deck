@@ -5,7 +5,7 @@
 
 <template>
 	<div class="controls">
-		<NcModal v-if="showAddCardModal" class="card-selector" @close="clickHideAddCardModel">
+		<NcModal v-if="showAddCardModal && !isCombiProject" class="card-selector" @close="clickHideAddCardModel">
 			<CreateNewCardCustomPicker show-created-notice @cancel="clickHideAddCardModel" />
 		</NcModal>
 		<div v-if="overviewName" class="board-title">
@@ -443,6 +443,9 @@ export default {
 			this.filter = filterReset
 		},
 		clickShowAddCardModel() {
+			if (this.isCombiProject) {
+				return
+			}
 			this.showAddCardModal = true
 		},
 		clickHideAddCardModel() {

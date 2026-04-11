@@ -24,6 +24,7 @@
 
 namespace OCA\Deck\Controller;
 
+use OCA\Deck\NoPermissionException;
 use OCA\Deck\Service\AssignmentService;
 use OCA\Deck\Service\CardService;
 use OCP\IRequest;
@@ -67,10 +68,27 @@ class CardControllerTest extends TestCase {
 
 	public function testCreate() {
 		$this->cardService->expects($this->once())
+			->method('isCombiProjectBoardByStackId')
+			->with(1)
+			->willReturn(false);
+
+		$this->cardService->expects($this->once())
 			->method('create')
 			->with('foo', 1, 'text', 3, $this->userId)
 			->willReturn(1);
 		$this->assertEquals(1, $this->controller->create('foo', 1, 'text', 3));
+	}
+
+	public function testCreateForCombiBoardIsBlocked() {
+		$this->cardService->expects($this->once())
+			->method('isCombiProjectBoardByStackId')
+			->with(1)
+			->willReturn(true);
+		$this->cardService->expects($this->never())
+			->method('create');
+
+		$this->expectException(NoPermissionException::class);
+		$this->controller->create('foo', 1, 'text', 3);
 	}
 
 	public function testUpdate() {
@@ -124,5 +142,31 @@ class CardControllerTest extends TestCase {
 	public function testUnssignUser() {
 		$this->assignmentService->expects($this->once())->method('unassignUser');
 		$this->controller->unassignUser(1, 'admin');
+	}
+
+	public function testCloneForCombiTargetStackIsBlocked() {
+		$this->cardService->expects($this->once())
+			->method('isCombiProjectBoardByStackId')
+			->with(2)
+			->willReturn(true);
+		$this->cardService->expects($this->never())
+			->method('isCombiProjectBoardByCardId');
+		$this->cardService->expects($this->never())
+			->method('cloneCard');
+
+		$this->expectException(NoPermissionException::class);
+		$this->controller->clone(1, 2);
+	}
+
+	public function testCloneForCombiSourceBoardIsBlocked() {
+		$this->cardService->expects($this->once())
+			->method('isCombiProjectBoardByCardId')
+			->with(1)
+			->willReturn(true);
+		$this->cardService->expects($this->never())
+			->method('cloneCard');
+
+		$this->expectException(NoPermissionException::class);
+		$this->controller->clone(1);
 	}
 }

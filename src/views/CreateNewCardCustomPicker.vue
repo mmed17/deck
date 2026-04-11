@@ -136,10 +136,13 @@ import Description from '../components/card/Description.vue'
 import CardPlusOutline from 'vue-material-design-icons/CardPlusOutline.vue'
 import FormatColumnsIcon from 'vue-material-design-icons/FormatColumns.vue'
 import DeckIcon from '../components/icons/DeckIcon.vue'
+import { ProjectService } from '../services/ProjectService.js'
 import { showError } from '../helpers/errors.js'
 
 const cardApi = new CardApi()
 const apiClient = new BoardApi()
+const projectService = new ProjectService()
+const combiBoardCache = new Map()
 
 export default {
 	name: 'CreateNewCardCustomPicker',
@@ -222,14 +225,59 @@ export default {
 		})
 	},
 	methods: {
-		fetchBoards() {
-			axios.get(generateUrl('/apps/deck/boards')).then((response) => {
-				this.boards = response.data.filter((board) => {
+		async fetchBoards() {
+			try {
+				const response = await axios.get(generateUrl('/apps/deck/boards'))
+				const editableBoards = response.data.filter((board) => {
 					return board?.permissions?.PERMISSION_EDIT && !board?.archived && !board?.deletedAt
 				})
-				this.loading = false
+				const nonCombiBoards = await this.filterCombiBoards(editableBoards)
+				this.boards = nonCombiBoards
 				this.preSelectBoard()
-			})
+			} catch (error) {
+				showError(error)
+				this.boards = []
+			} finally {
+				this.loading = false
+			}
+		},
+		async filterCombiBoards(boards) {
+			const checks = await Promise.all(boards.map(async (board) => {
+				const isCombi = await this.isCombiBoard(board?.id)
+				return {
+					board,
+					isCombi,
+				}
+			}))
+
+			return checks
+				.filter((entry) => !entry.isCombi)
+				.map((entry) => entry.board)
+		},
+		async isCombiBoard(boardId) {
+			const numericBoardId = Number(boardId)
+			if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) {
+				return false
+			}
+
+			if (combiBoardCache.has(numericBoardId)) {
+				return combiBoardCache.get(numericBoardId)
+			}
+
+			try {
+				const project = await projectService.getProjectByBoardId(numericBoardId)
+				const isCombiBoard = Number(project?.type) === 0
+				combiBoardCache.set(numericBoardId, isCombiBoard)
+				return isCombiBoard
+			} catch (error) {
+				if (error?.response?.status === 404) {
+					combiBoardCache.set(numericBoardId, false)
+					return false
+				}
+
+				console.debug('Could not resolve board project context', error)
+				return false
+			}
 		},
 		async fetchBoardDetails(board) {
 			try {

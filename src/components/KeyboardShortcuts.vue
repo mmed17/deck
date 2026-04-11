@@ -19,7 +19,7 @@
 <script>
 import DueDateSelector from './card/DueDateSelector.vue'
 import { emit, subscribe, unsubscribe } from '@nextcloud/event-bus'
-import { mapState } from 'vuex'
+import { mapGetters, mapState } from 'vuex'
 import TagSelector from './card/TagSelector.vue'
 import AssignmentSelector from './card/AssignmentSelector.vue'
 import CardItem from './cards/CardItem.vue'
@@ -41,6 +41,7 @@ export default {
 		}
 	},
 	computed: {
+		...mapGetters(['isCurrentBoardCombiProject']),
 		...mapState({
 			board: state => state.currentBoard,
 		}),
@@ -99,6 +100,9 @@ export default {
 
 			switch (key.code) {
 			case 'KeyN':
+				if (this.isCurrentBoardCombiProject) {
+					return
+				}
 				emit('deck:board:show-new-card', this.board.id)
 				break
 			case 'KeyF':

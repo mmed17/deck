@@ -24,6 +24,7 @@
 namespace OCA\Deck\Controller;
 
 use OCA\Deck\Db\Card;
+use OCA\Deck\NoPermissionException;
 use OCA\Deck\Service\AssignmentService;
 use OCA\Deck\Service\CardService;
 use OCP\AppFramework\Http;
@@ -89,12 +90,34 @@ class CardApiControllerTest extends \Test\TestCase {
 			->willReturn($this->stackExample['id']);
 
 		$this->cardService->expects($this->once())
+			->method('isCombiProjectBoardByStackId')
+			->with($this->stackExample['id'])
+			->willReturn(false);
+
+		$this->cardService->expects($this->once())
 			->method('create')
 			->willReturn($card);
 
 		$expected = new DataResponse($card, HTTP::STATUS_OK);
 		$actual = $this->controller->create('title');
 		$this->assertEquals($expected, $actual);
+	}
+
+	public function testCreateForCombiBoardIsBlocked() {
+		$this->request->expects($this->once())
+			->method('getParam')
+			->with('stackId')
+			->willReturn($this->stackExample['id']);
+
+		$this->cardService->expects($this->once())
+			->method('isCombiProjectBoardByStackId')
+			->with($this->stackExample['id'])
+			->willReturn(true);
+		$this->cardService->expects($this->never())
+			->method('create');
+
+		$this->expectException(NoPermissionException::class);
+		$this->controller->create('title');
 	}
 
 	public function testUpdate() {
