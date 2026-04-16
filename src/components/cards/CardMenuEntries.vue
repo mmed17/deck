@@ -71,6 +71,7 @@ export default {
 		cardRichObject() {
 			return {
 				id: '' + this.card.id,
+				boardId: String(this.boardId),
 				name: this.card.title,
 				boardname: this.boardById(this.boardId)?.title,
 				stackname: this.stackById(this.card.stackId)?.title,
