@@ -5,16 +5,6 @@
         <div class="board-scroll-container">
             
             <div v-if="board" class="saas-section">
-                <div class="saas-section-header clickable" @click="toggleSection('timeline')">
-                    <h3>{{ t('deck', 'Timeline') }}</h3>
-                    <ChevronDown class="section-icon" :class="{ 'is-collapsed': sectionState.timeline }" />
-                </div>
-                <div v-show="!sectionState.timeline" class="section-content">
-                    <TimelineWidget :board-id="board.id" />
-                </div>
-            </div>
-
-            <div v-if="board" class="saas-section">
                 <div class="saas-section-header clickable" @click="toggleSection('analytics')">
                     <h3>{{ t('deck', 'Analytics') }}</h3>
                     <ChevronDown class="section-icon" :class="{ 'is-collapsed': sectionState.analytics }" />
@@ -182,7 +172,6 @@ import GlobalSearchResults from '../search/GlobalSearchResults.vue'
 import { showError } from '../../helpers/errors.js'
 import { createSession } from '../../sessions.js'
 import CardSidebar from '../card/CardSidebar.vue'
-import TimelineWidget from './TimelineWidget.vue'
 import ReportingDashboard from './ReportingDashboard.vue'
 import CardPolicyManager from './CardPolicyManager.vue'
 
@@ -204,7 +193,6 @@ export default {
 			CheckIcon,
 			ChevronDown, 
 			CardSidebar,
-			TimelineWidget,
 			ReportingDashboard,
 			CardPolicyManager,
 		},
@@ -221,7 +209,6 @@ export default {
             currentMousePosX: null,
             localModal: null,
             sectionState: {
-                timeline: false,
                 analytics: false,
                 permissions: true,
                 tasks: false
