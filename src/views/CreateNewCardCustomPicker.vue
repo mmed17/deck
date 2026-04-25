@@ -246,15 +246,17 @@ export default {
 				const editableBoards = response.data.filter((board) => {
 					return board?.permissions?.PERMISSION_EDIT && !board?.archived && !board?.deletedAt
 				})
-				const nonCombiBoards = await this.filterCombiBoards(editableBoards)
-				this.boards = nonCombiBoards
 				if (this.isBoardLocked) {
+					const fixedBoardId = Number(this.fixedBoardId)
+					this.boards = editableBoards.filter((board) => Number(board?.id) === fixedBoardId)
 					const boardWasSelected = this.preSelectFixedBoard()
 					if (!boardWasSelected) {
 						showError(new Error(t('deck', 'The project board for this conversation is not available.')))
 						this.close()
 					}
 				} else {
+					const nonCombiBoards = await this.filterCombiBoards(editableBoards)
+					this.boards = nonCombiBoards
 					this.preSelectBoard()
 				}
 			} catch (error) {
