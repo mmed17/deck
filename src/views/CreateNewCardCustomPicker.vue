@@ -19,7 +19,8 @@
 					<div class="selector-wrapper--icon">
 						<DeckIcon :size="20" />
 					</div>
-					<NcSelect v-model="selectedBoard"
+					<NcSelect v-if="!isBoardLocked"
+						v-model="selectedBoard"
 						:placeholder="t('deck', 'Select a board')"
 						:options="boards"
 						:disabled="loading"
@@ -39,6 +40,12 @@
 							</span>
 						</template>
 					</NcSelect>
+					<div v-else class="selector-wrapper--selector selector-wrapper--locked-board">
+						<span v-if="selectedBoard">
+							<span :style="{ 'backgroundColor': '#' + selectedBoard.color }" class="board-bullet" />
+							<span data-cy="board-select-title">{{ selectedBoard.title }}</span>
+						</span>
+					</div>
 				</div>
 
 				<div class="col selector-wrapper">
@@ -177,6 +184,10 @@ export default {
 			type: String,
 			default: t('deck', 'Create card'),
 		},
+		fixedBoardId: {
+			type: [Number, String],
+			default: null,
+		},
 	},
 	data() {
 		return {
@@ -203,6 +214,10 @@ export default {
 		}
 	},
 	computed: {
+		isBoardLocked() {
+			const fixedBoardId = Number(this.fixedBoardId)
+			return Number.isInteger(fixedBoardId) && fixedBoardId > 0
+		},
 		isBoardAndStackChoosen() {
 			return !(this.selectedBoard === '' || this.selectedStack === '')
 		},
@@ -233,7 +248,15 @@ export default {
 				})
 				const nonCombiBoards = await this.filterCombiBoards(editableBoards)
 				this.boards = nonCombiBoards
-				this.preSelectBoard()
+				if (this.isBoardLocked) {
+					const boardWasSelected = this.preSelectFixedBoard()
+					if (!boardWasSelected) {
+						showError(new Error(t('deck', 'The project board for this conversation is not available.')))
+						this.close()
+					}
+				} else {
+					this.preSelectBoard()
+				}
 			} catch (error) {
 				showError(error)
 				this.boards = []
@@ -242,7 +265,15 @@ export default {
 			}
 		},
 		async filterCombiBoards(boards) {
+			const fixedBoardId = Number(this.fixedBoardId)
 			const checks = await Promise.all(boards.map(async (board) => {
+				if (Number(board?.id) === fixedBoardId) {
+					return {
+						board,
+						isCombi: false,
+					}
+				}
+
 				const isCombi = await this.isCombiBoard(board?.id)
 				return {
 					board,
@@ -362,6 +393,18 @@ export default {
 				this.onSelectBoard(preSelectedBoard)
 			}
 		},
+		preSelectFixedBoard() {
+			const fixedBoardId = Number(this.fixedBoardId)
+			const preSelectedBoard = this.boards.find((item) => Number(item.id) === fixedBoardId)
+
+			if (preSelectedBoard) {
+				this.selectedBoard = preSelectedBoard
+				this.onSelectBoard(preSelectedBoard, false)
+				return true
+			}
+
+			return false
+		},
 		preSelectStack() {
 			const selectedStackId = Number(localStorage.getItem('deck.selectedStackId'))
 			const preSelectedStack = this.stacksFromBoard.find(item => item.id === selectedStackId)
@@ -370,8 +413,10 @@ export default {
 				this.selectedStack = preSelectedStack
 			}
 		},
-		async onSelectBoard(board) {
-			localStorage.setItem('deck.selectedBoardId', board.id)
+		async onSelectBoard(board, persistSelection = true) {
+			if (persistSelection) {
+				localStorage.setItem('deck.selectedBoardId', board.id)
+			}
 			this.selectedStack = ''
 			await this.fetchBoardDetails(board)
 		},
@@ -414,6 +459,16 @@ h2 {
 	border: none;
 	border-radius: 50%;
 	cursor: pointer;
+}
+
+.selector-wrapper--locked-board {
+	display: flex;
+	align-items: center;
+	min-height: 42px;
+	padding-inline: 12px;
+	border: 1px solid var(--color-border-maxcontrast);
+	border-radius: var(--border-radius-large);
+	background-color: var(--color-main-background);
 }
 
 .modal-buttons {

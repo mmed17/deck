@@ -8,9 +8,13 @@ import { generateUrl } from '@nextcloud/router'
 
 import CardCreateDialog from './CardCreateDialog.vue'
 import { buildSelector } from './helpers/selector.js'
+import { showError } from './helpers/errors.js'
+import { ProjectService } from './services/ProjectService.js'
 import './init-collections.js'
 
 import './shared-init.js'
+
+const projectService = new ProjectService()
 
 Vue.prototype.t = t
 Vue.prototype.n = n
@@ -25,6 +29,25 @@ window.addEventListener('DOMContentLoaded', () => {
 		label: t('deck', 'Create a card'),
 		icon: 'icon-deck',
 		async callback({ message: { message, messageParameters, actorDisplayName }, metadata: { name: conversationName, token: conversationToken } }) {
+			let fixedBoardId = null
+
+			if (conversationToken) {
+				try {
+					const project = await projectService.getProjectByTalkConversationToken(conversationToken)
+					const projectBoardId = Number(project?.boardId)
+
+					if (Number.isInteger(projectBoardId) && projectBoardId > 0) {
+						fixedBoardId = projectBoardId
+					}
+				} catch (error) {
+					if (error?.response?.status !== 404) {
+						console.debug('Could not resolve project context for Talk conversation', error)
+						showError(new Error(t('deck', 'Could not resolve the related project board for this conversation.')))
+						return
+					}
+				}
+			}
+
 			const parsedMessage = message.replace(/{[a-z0-9-_]+}/gi, function(parameter) {
 				const parameterName = parameter.substr(1, parameter.length - 2)
 
@@ -50,6 +73,7 @@ window.addEventListener('DOMContentLoaded', () => {
 				await buildSelector(CardCreateDialog, {
 					props: {
 						title: shortenedMessage,
+						fixedBoardId,
 						description: parsedMessage + '\n\n' + '['
 							+ t('deck', 'Message from {author} in {conversationName}', {
 								author: actorDisplayName,

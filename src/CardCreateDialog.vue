@@ -7,6 +7,7 @@
 	<NcModal class="card-selector" @close="close">
 		<CreateNewCardCustomPicker :title="title"
 			:description="description"
+			:fixed-board-id="fixedBoardId"
 			show-created-notice
 			@cancel="close"
 			@close="close" />
@@ -31,6 +32,10 @@ export default {
 		description: {
 			type: String,
 			default: '',
+		},
+		fixedBoardId: {
+			type: [Number, String],
+			default: null,
 		},
 	},
 }

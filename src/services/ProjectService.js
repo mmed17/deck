@@ -24,6 +24,22 @@ export class ProjectService {
     }
 
     /**
+     * Get project details by Talk conversation token
+     *
+     * @param {string} token
+     * @return {Promise}
+     */
+    getProjectByTalkConversationToken(token) {
+        return axios.get(generateUrl(`/apps/projectcreatoraio/api/v1/projects/talk/${encodeURIComponent(token)}`))
+            .then((response) => {
+                return Promise.resolve(response.data)
+            })
+            .catch((err) => {
+                return Promise.reject(err)
+            })
+    }
+
+    /**
      * Get timeline items for a project
      *
      * @param {number} projectId
