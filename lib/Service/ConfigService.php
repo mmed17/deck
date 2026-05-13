@@ -79,7 +79,7 @@ class ConfigService {
 				if ($this->getUserId() === null) {
 					return false;
 				}
-				return (bool)$this->config->getUserValue($this->getUserId(), Application::APP_ID, 'calendar', true);
+				return filter_var($this->config->getUserValue($this->getUserId(), Application::APP_ID, 'calendar', false), FILTER_VALIDATE_BOOLEAN);
 			case 'cardDetailsInModal':
 				if ($this->getUserId() === null) {
 					return false;
@@ -99,13 +99,13 @@ class ConfigService {
 			return false;
 		}
 
-		$appConfigState = $this->config->getAppValue(Application::APP_ID, 'calendar', 'yes') === 'yes';
-		$defaultState = (bool)$this->config->getUserValue($this->getUserId(), Application::APP_ID, 'calendar', $appConfigState);
+		$appConfigState = $this->config->getAppValue(Application::APP_ID, 'calendar', 'no') === 'yes';
+		$defaultState = filter_var($this->config->getUserValue($this->getUserId(), Application::APP_ID, 'calendar', $appConfigState), FILTER_VALIDATE_BOOLEAN);
 		if ($boardId === null) {
 			return $defaultState;
 		}
 
-		return (bool)$this->config->getUserValue($this->getUserId(), Application::APP_ID, 'board:' . $boardId . ':calendar', $defaultState);
+		return filter_var($this->config->getUserValue($this->getUserId(), Application::APP_ID, 'board:' . $boardId . ':calendar', $defaultState), FILTER_VALIDATE_BOOLEAN);
 	}
 
 	public function isCardDetailsInModal(?int $boardId = null): bool {
