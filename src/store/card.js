@@ -6,6 +6,7 @@
 import { CardApi } from './../services/CardApi.js'
 import moment from 'moment'
 import Vue from 'vue'
+import { translate as t } from '@nextcloud/l10n'
 
 const apiClient = new CardApi()
 
@@ -321,7 +322,8 @@ export default {
 				})
 				.catch((error) => {
 					console.error(error)
-					OC.Notification.showTemporary('Failed to reorder card')
+					const msg = error?.response?.data?.message || error?.response?.data?.ocs?.data?.message
+					OC.Notification.showTemporary(msg || t('deck', 'Failed to reorder card'))
 					dispatch('loadStacks', rootState.currentBoard.id, { root: true })
 				})
 		},

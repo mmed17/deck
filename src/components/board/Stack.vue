@@ -278,7 +278,7 @@ export default {
 			return colorMap[this.stack?.title] || '#0082c9'
 		},
 		dragHandleSelector() {
-			return this.canEdit && !this.showArchived && !this.isCombiProject ? null : '.no-drag'
+			return this.canEdit && !this.showArchived ? null : '.no-drag'
 		},
 		cardDetailsInModal: {
 			get() {
