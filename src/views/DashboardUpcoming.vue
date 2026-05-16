@@ -5,28 +5,37 @@
 
 <template>
 	<div>
-		<NcDashboardWidget :items="cards"
-			empty-content-icon="icon-deck"
-			:empty-content-message="t('deck', 'No upcoming cards')"
-			:show-more-text="t('deck', 'upcoming cards ...')"
-			:show-more-url="showMoreUrl"
-			:loading="loading"
-			:limit="5"
-			@hide="() => {}"
-			@markDone="() => {}">
-			<template #default="{ item }">
-				<Card 
-					:card="item" 
-					:redirect-to-project="true" 
-					@open:sidebar="handleSidebarOpen" />
-				
-				<CardNotesAndComments 
-					v-if="openedCardId === item.id"
-					:title="item.title"
-					:card-id="item.id"
-					@close="handleSidebarClose" />
-			</template>
-		</NcDashboardWidget>
+		<div v-if="loading" class="dashboard-loading">
+			<div class="icon icon-loading" />
+		</div>
+
+		<div v-else-if="visibleCards.length === 0" class="dashboard-empty">
+			<div class="empty-content-icon icon-deck" />
+			<p>{{ t('deck', 'No upcoming cards') }}</p>
+		</div>
+
+		<div v-else class="dashboard-project-groups">
+			<div v-for="group in groupedCards" :key="group.key" class="dashboard-project-group">
+				<h3 class="dashboard-project-group__title">
+					{{ group.projectName }}
+				</h3>
+				<template v-for="card in group.cards">
+					<Card :key="card.id"
+						:card="card"
+						:redirect-to-project="true"
+						@open:sidebar="handleSidebarOpen" />
+					<CardNotesAndComments v-if="openedCardId === card.id"
+						:key="`notes-${card.id}`"
+						:title="card.title"
+						:card-id="card.id"
+						@close="handleSidebarClose" />
+				</template>
+			</div>
+		</div>
+
+		<div v-if="showMoreUrl" class="dashboard-show-more">
+			<a :href="showMoreUrl">{{ t('deck', 'upcoming cards ...') }}</a>
+		</div>
 
 		<div class="center-button">
 			<NcButton v-if="isAdmin" @click="toggleAddCardModel">
@@ -44,13 +53,14 @@
 
 <script>
 import PlusIcon from 'vue-material-design-icons/Plus.vue'
-import { NcButton, NcDashboardWidget, NcModal } from '@nextcloud/vue'
+import { NcButton, NcModal } from '@nextcloud/vue'
 import { mapGetters, mapState } from 'vuex'
 import Card from '../components/dashboard/Card.vue'
 import { generateUrl } from '@nextcloud/router'
 import CreateNewCardCustomPicker from './CreateNewCardCustomPicker.vue'
 import { getCurrentUser } from '@nextcloud/auth'
-import CardNotesAndComments from "../components/card/CardNotesAndComments.vue";
+import CardNotesAndComments from '../components/card/CardNotesAndComments.vue'
+import { groupCardsByProject } from '../utils/dashboardProjectGroups.js'
 
 export default {
 	name: 'DashboardUpcoming',
@@ -58,7 +68,6 @@ export default {
 		CreateNewCardCustomPicker,
 		CardNotesAndComments,
 		NcModal,
-		NcDashboardWidget,
 		NcButton,
 		PlusIcon,
 		Card,
@@ -74,43 +83,52 @@ export default {
 			'assignedCardsDashboard',
 		]),
 		...mapState({
-            selectedBoardId: state => state.dashboard.selectedBoardId,
-			openedCardId: state => state.card.openedCardId
-        }),
+			selectedBoardId: state => state.dashboard.selectedBoardId,
+			openedCardId: state => state.card.openedCardId,
+		}),
 		isAdmin() {
 			return !!getCurrentUser()?.isAdmin
 		},
+		cardLimit() {
+			return 5
+		},
 		cards() {
-            const list = [
-                ...this.assignedCardsDashboard,
-            ].filter((card) => {
-                return card.duedate && new Date(card.duedate) > new Date();
-            })
-            list.sort((a, b) => {
-                return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()
-            })
-            return list;
-        },
+			const list = [
+				...this.assignedCardsDashboard,
+			].filter((card) => {
+				return card.duedate && new Date(card.duedate) > new Date()
+			})
+			list.sort((a, b) => {
+				return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()
+			})
+			return list
+		},
+		visibleCards() {
+			return this.cards.slice(0, this.cardLimit)
+		},
+		groupedCards() {
+			return groupCardsByProject(this.visibleCards, this.t('deck', 'Other'))
+		},
 		showMoreUrl() {
-            const hasMore = this.cards.length > 5;
-            if (!hasMore) {
-                return null;
-            }
+			const hasMore = this.cards.length > this.cardLimit
+			if (!hasMore) {
+				return null
+			}
 
-            if (this.selectedBoardId) {
-                return generateUrl('/apps/deck/board/') + this.selectedBoardId;
-            } else {
-                return generateUrl('/apps/deck');
-            }
-        },
+			if (this.selectedBoardId) {
+				return generateUrl('/apps/deck/board/') + this.selectedBoardId
+			} else {
+				return generateUrl('/apps/deck')
+			}
+		},
 	},
 	watch: {
 		selectedBoardId(newValue, oldValue) {
-            this.fetchUpcomingCards();
-		}
+			this.fetchUpcomingCards()
+		},
 	},
 	beforeMount() {
-		this.fetchUpcomingCards();
+		this.fetchUpcomingCards()
 	},
 	methods: {
 		toggleAddCardModel() {
@@ -121,15 +139,15 @@ export default {
 			this.$store.dispatch('loadUpcoming').then(() => {
 				this.loading = false
 			})
-        },
+		},
 		handleSidebarOpen(card) {
-			this.$store.commit('setOpenedCardId', card.id);
+			this.$store.commit('setOpenedCardId', card.id)
 		},
 		handleSidebarClose() {
 			setTimeout(() => {
-				this.$store.commit('setOpenedCardId', null);
-			}, 200);
-		}
+				this.$store.commit('setOpenedCardId', null)
+			}, 200)
+		},
 	},
 }
 </script>
@@ -140,6 +158,40 @@ export default {
 		align-items: center;
 		justify-content: center;
 		margin-top: 10px;
+	}
+
+	.dashboard-loading {
+		display: flex;
+		justify-content: center;
+		padding: 32px 0;
+	}
+
+	.dashboard-empty {
+		text-align: center;
+		padding: 5vh 0;
+	}
+
+	.dashboard-show-more {
+		text-align: center;
+		padding: 8px 0;
+		a {
+			font-weight: 600;
+		}
+	}
+
+	.dashboard-project-group__title {
+		margin: 8px 8px 4px;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--color-text-maxcontrast);
+	}
+
+	.dashboard-project-group {
+		& + & {
+			margin-top: 4px;
+			padding-top: 4px;
+			border-top: 1px solid var(--color-border);
+		}
 	}
 
 	#deck-widget-empty-content {
