@@ -49,6 +49,29 @@ class NoteMapper extends QBMapper {
     }
 
     /**
+     * Get private notes for the current user across multiple cards.
+     * Replaces N per-card queries with a single batched query.
+     *
+     * @param string $userId
+     * @param int[] $cardIds
+     * @return Note[]
+     */
+    public function findByCardsForUser(string $userId, array $cardIds): array {
+        if ($cardIds === []) {
+            return [];
+        }
+
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')
+            ->from($this->getTableName())
+            ->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+            ->andWhere($qb->expr()->in('card_id', $qb->createNamedParameter($cardIds, IQueryBuilder::PARAM_INT_ARRAY)))
+            ->orderBy('updated_at', 'DESC');
+
+        return $this->findEntities($qb);
+    }
+
+    /**
      * Create a new note in the database
      */
     public function create(string $userId, int $cardId, string $content): Note {
