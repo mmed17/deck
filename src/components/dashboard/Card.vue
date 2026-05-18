@@ -64,8 +64,13 @@ export default {
 	},
 	methods: {
 		redirect() {
-			const url = this.cardLink;
-			window.open(url);
+			if (this.redirectToProject && this.card.project?.id) {
+				const url = generateUrl(`/apps/projectcreatoraio/${this.card.project.id}`) + '?tab=deck'
+				window.location.href = url
+			} else {
+				const url = this.cardLink;
+				window.open(url)
+			}
 		},
 		openSidebar() {
 			this.$emit('open:sidebar', this.card);
