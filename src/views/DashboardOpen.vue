@@ -146,16 +146,28 @@ export default {
 	}
 
 	.dashboard-project-group__title {
-		margin: 8px 8px 4px;
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--color-text-maxcontrast);
+		margin: 16px 8px 8px;
+		font-size: 1.1rem;
+		font-weight: 700;
+		color: var(--color-main-text);
+		display: flex;
+		align-items: center;
+		gap: 8px;
+
+		&::before {
+			content: '';
+			display: inline-block;
+			width: 4px;
+			height: 1.2em;
+			background-color: var(--color-primary-element);
+			border-radius: 2px;
+		}
 	}
 
 	.dashboard-project-group {
 		& + & {
-			margin-top: 4px;
-			padding-top: 4px;
+			margin-top: 12px;
+			padding-top: 8px;
 			border-top: 1px solid var(--color-border);
 		}
 	}
