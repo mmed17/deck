@@ -15,6 +15,9 @@
 		</div>
 
 		<div v-else class="dashboard-project-groups">
+			<p class="dashboard-total-count">
+				{{ cards.length }} {{ t('deck', 'non-due tasks') }}
+			</p>
 			<div v-for="group in groupedCards" :key="group.key" class="dashboard-project-group">
 				<h3 class="dashboard-project-group__title">
 					{{ group.projectName }}
@@ -143,6 +146,12 @@ export default {
 		a {
 			font-weight: 600;
 		}
+	}
+
+	.dashboard-total-count {
+		padding: 8px;
+		font-weight: 600;
+		color: var(--color-text-maxcontrast);
 	}
 
 	.dashboard-project-group__title {
