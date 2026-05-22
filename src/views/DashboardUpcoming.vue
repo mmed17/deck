@@ -9,12 +9,27 @@
 			<div class="icon icon-loading" />
 		</div>
 
-		<div v-else-if="visibleCards.length === 0" class="dashboard-empty">
+		<div v-else-if="visibleCards.length === 0 && !dueDateFilter" class="dashboard-empty">
 			<div class="empty-content-icon icon-deck" />
 			<p>{{ t('deck', 'No upcoming cards') }}</p>
 		</div>
 
+		<div v-else-if="visibleCards.length === 0 && dueDateFilter" class="dashboard-empty">
+			<div class="empty-content-icon icon-deck" />
+			<p>{{ t('deck', 'No upcoming cards in this period') }}</p>
+		</div>
+
 		<div v-else class="dashboard-project-groups">
+			<div class="dashboard-filters">
+				<button
+					v-for="opt in dueDateOptions"
+					:key="opt.value"
+					class="dashboard-filter-chip"
+					:class="{ active: dueDateFilter === opt.value }"
+					@click="dueDateFilter = dueDateFilter === opt.value ? '' : opt.value">
+					{{ opt.label }}
+				</button>
+			</div>
 			<p class="dashboard-total-count">
 				{{ cards.length }} {{ t('deck', 'upcoming cards') }}
 			</p>
@@ -79,9 +94,17 @@ export default {
 		return {
 			loading: false,
 			showAddCardModal: false,
+			dueDateFilter: '',
 		}
 	},
 	computed: {
+		dueDateOptions() {
+			return [
+				{ value: '7days', label: this.t('deck', 'Next 7 days') },
+				{ value: '30days', label: this.t('deck', 'Next 30 days') },
+				{ value: '3months', label: this.t('deck', 'Next 3 months') },
+			]
+		},
 		...mapGetters([
 			'assignedCardsDashboard',
 		]),
@@ -96,10 +119,20 @@ export default {
 			return 5
 		},
 		cards() {
+			const now = new Date()
+			const ranges = {
+				'7days': 7 * 24 * 60 * 60 * 1000,
+				'30days': 30 * 24 * 60 * 60 * 1000,
+				'3months': 90 * 24 * 60 * 60 * 1000,
+			}
+
 			const list = [
 				...this.assignedCardsDashboard,
 			].filter((card) => {
 				return card.duedate && new Date(card.duedate) > new Date()
+			}).filter((card) => {
+				if (!this.dueDateFilter) return true
+				return new Date(card.duedate).getTime() - now.getTime() <= ranges[this.dueDateFilter]
 			})
 			list.sort((a, b) => {
 				return (new Date(a.duedate)).getTime() - (new Date(b.duedate)).getTime()
@@ -186,6 +219,28 @@ export default {
 		padding: 8px;
 		font-weight: 600;
 		color: var(--color-text-maxcontrast);
+	}
+
+	.dashboard-filters {
+		display: flex;
+		gap: 8px;
+		padding: 8px;
+	}
+
+	.dashboard-filter-chip {
+		padding: 4px 12px;
+		border: 1px solid var(--color-border);
+		border-radius: 16px;
+		background: transparent;
+		color: var(--color-text-maxcontrast);
+		font-size: 0.9rem;
+		cursor: pointer;
+
+		&.active {
+			background: var(--color-primary-element);
+			color: var(--color-primary-text);
+			border-color: var(--color-primary-element);
+		}
 	}
 
 	.dashboard-project-group__title {
