@@ -9,17 +9,7 @@
 			<div class="icon icon-loading" />
 		</div>
 
-		<div v-else-if="visibleCards.length === 0 && !dueDateFilter" class="dashboard-empty">
-			<div class="empty-content-icon icon-deck" />
-			<p>{{ t('deck', 'No upcoming cards') }}</p>
-		</div>
-
-		<div v-else-if="visibleCards.length === 0 && dueDateFilter" class="dashboard-empty">
-			<div class="empty-content-icon icon-deck" />
-			<p>{{ t('deck', 'No upcoming cards in this period') }}</p>
-		</div>
-
-		<div v-else class="dashboard-project-groups">
+		<template v-else>
 			<div class="dashboard-filters">
 				<button
 					v-for="opt in dueDateOptions"
@@ -29,43 +19,62 @@
 					@click="dueDateFilter = dueDateFilter === opt.value ? '' : opt.value">
 					{{ opt.label }}
 				</button>
+				<button
+					v-if="dueDateFilter"
+					class="dashboard-filter-chip dashboard-filter-chip--clear"
+					@click="dueDateFilter = ''">
+					{{ t('deck', 'Clear filter') }}
+				</button>
 			</div>
-			<p class="dashboard-total-count">
-				{{ cards.length }} {{ t('deck', 'upcoming cards') }}
-			</p>
-			<div v-for="group in groupedCards" :key="group.key" class="dashboard-project-group">
-				<h3 class="dashboard-project-group__title">
-					{{ group.projectName }}
-				</h3>
-				<template v-for="card in group.cards">
-					<Card :key="card.id"
-						:card="card"
-						:redirect-to-project="true"
-						@open:sidebar="handleSidebarOpen" />
-					<CardNotesAndComments v-if="openedCardId === card.id"
-						:key="`notes-${card.id}`"
-						:title="card.title"
-						:card-id="card.id"
-						@close="handleSidebarClose" />
-				</template>
+
+			<div v-if="visibleCards.length === 0 && !dueDateFilter" class="dashboard-empty">
+				<div class="empty-content-icon icon-deck" />
+				<p>{{ t('deck', 'No upcoming cards') }}</p>
 			</div>
-		</div>
 
-		<div v-if="showMoreUrl" class="dashboard-show-more">
-			<a :href="showMoreUrl">{{ t('deck', 'upcoming cards ...') }}</a>
-		</div>
+			<div v-else-if="visibleCards.length === 0 && dueDateFilter" class="dashboard-empty">
+				<div class="empty-content-icon icon-deck" />
+				<p>{{ t('deck', 'No upcoming cards in this period') }}</p>
+			</div>
 
-		<div class="center-button">
-			<NcButton v-if="isAdmin" @click="toggleAddCardModel">
-				<template #icon>
-					<PlusIcon :size="20" />
-				</template>
-				{{ t('deck', 'New card') }}
-			</NcButton>
-			<NcModal v-if="showAddCardModal" class="card-selector" @close="toggleAddCardModel">
-				<CreateNewCardCustomPicker show-created-notice @cancel="toggleAddCardModel" />
-			</NcModal>
-		</div>
+			<div v-else class="dashboard-project-groups">
+				<p class="dashboard-total-count">
+					{{ cards.length }} {{ t('deck', 'upcoming cards') }}
+				</p>
+				<div v-for="group in groupedCards" :key="group.key" class="dashboard-project-group">
+					<h3 class="dashboard-project-group__title">
+						{{ group.projectName }}
+					</h3>
+					<template v-for="card in group.cards">
+						<Card :key="card.id"
+							:card="card"
+							:redirect-to-project="true"
+							@open:sidebar="handleSidebarOpen" />
+						<CardNotesAndComments v-if="openedCardId === card.id"
+							:key="`notes-${card.id}`"
+							:title="card.title"
+							:card-id="card.id"
+							@close="handleSidebarClose" />
+					</template>
+				</div>
+			</div>
+
+			<div v-if="showMoreUrl" class="dashboard-show-more">
+				<a :href="showMoreUrl">{{ t('deck', 'upcoming cards ...') }}</a>
+			</div>
+
+			<div class="center-button">
+				<NcButton v-if="isAdmin" @click="toggleAddCardModel">
+					<template #icon>
+						<PlusIcon :size="20" />
+					</template>
+					{{ t('deck', 'New card') }}
+				</NcButton>
+				<NcModal v-if="showAddCardModal" class="card-selector" @close="toggleAddCardModel">
+					<CreateNewCardCustomPicker show-created-notice @cancel="toggleAddCardModel" />
+				</NcModal>
+			</div>
+		</template>
 	</div>
 </template>
 
@@ -240,6 +249,12 @@ export default {
 			background: var(--color-primary-element);
 			color: var(--color-primary-text);
 			border-color: var(--color-primary-element);
+		}
+
+		&--clear {
+			margin-left: auto;
+			border-color: var(--color-error);
+			color: var(--color-error);
 		}
 	}
 
