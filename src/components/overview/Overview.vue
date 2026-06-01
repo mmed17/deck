@@ -16,43 +16,61 @@
 		<div v-else-if="isValidFilter" class="overview">
 			<div class="dashboard-column">
 				<h3>{{ t('deck', 'Overdue') }}</h3>
-				<div v-for="card in sortCards('overdue')" :key="card.id">
-					<CardItem :id="card.id" />
+				<div v-for="group in projectGroups('overdue')" :key="group.key" class="project-group">
+					<h4 class="project-group__title">{{ group.projectName }}</h4>
+					<div v-for="card in group.cards" :key="card.id">
+						<CardItem :id="card.id" />
+					</div>
 				</div>
 			</div>
 
 			<div class="dashboard-column">
 				<h3>{{ t('deck', 'Today') }}</h3>
-				<div v-for="card in sortCards('today')" :key="card.id">
-					<CardItem :id="card.id" />
+				<div v-for="group in projectGroups('today')" :key="group.key" class="project-group">
+					<h4 class="project-group__title">{{ group.projectName }}</h4>
+					<div v-for="card in group.cards" :key="card.id">
+						<CardItem :id="card.id" />
+					</div>
 				</div>
 			</div>
 
 			<div class="dashboard-column">
 				<h3>{{ t('deck', 'Tomorrow') }}</h3>
-				<div v-for="card in sortCards('tomorrow')" :key="card.id">
-					<CardItem :id="card.id" />
+				<div v-for="group in projectGroups('tomorrow')" :key="group.key" class="project-group">
+					<h4 class="project-group__title">{{ group.projectName }}</h4>
+					<div v-for="card in group.cards" :key="card.id">
+						<CardItem :id="card.id" />
+					</div>
 				</div>
 			</div>
 
 			<div class="dashboard-column">
 				<h3>{{ t('deck', 'Next 7 days') }}</h3>
-				<div v-for="card in sortCards('nextSevenDays')" :key="card.id">
-					<CardItem :id="card.id" />
+				<div v-for="group in projectGroups('nextSevenDays')" :key="group.key" class="project-group">
+					<h4 class="project-group__title">{{ group.projectName }}</h4>
+					<div v-for="card in group.cards" :key="card.id">
+						<CardItem :id="card.id" />
+					</div>
 				</div>
 			</div>
 
 			<div class="dashboard-column">
 				<h3>{{ t('deck', 'Later') }}</h3>
-				<div v-for="card in sortCards('later')" :key="card.id">
-					<CardItem :id="card.id" />
+				<div v-for="group in projectGroups('later')" :key="group.key" class="project-group">
+					<h4 class="project-group__title">{{ group.projectName }}</h4>
+					<div v-for="card in group.cards" :key="card.id">
+						<CardItem :id="card.id" />
+					</div>
 				</div>
 			</div>
 
 			<div class="dashboard-column">
 				<h3>{{ t('deck', 'No due') }}</h3>
-				<div v-for="card in assignedCardsDashboard.nodue" :key="card.id">
-					<CardItem :id="card.id" />
+				<div v-for="group in projectGroups('nodue')" :key="group.key" class="project-group">
+					<h4 class="project-group__title">{{ group.projectName }}</h4>
+					<div v-for="card in group.cards" :key="card.id">
+						<CardItem :id="card.id" />
+					</div>
 				</div>
 			</div>
 		</div>
@@ -66,6 +84,7 @@ import Controls from '../Controls.vue'
 import CardItem from '../cards/CardItem.vue'
 import { mapGetters } from 'vuex'
 import GlobalSearchResults from '../search/GlobalSearchResults.vue'
+import { groupCardsByProject } from '../../utils/dashboardProjectGroups.js'
 
 const FILTER_UPCOMING = 'upcoming'
 
@@ -139,6 +158,13 @@ export default {
 				})
 			}
 		},
+		projectGroups(when) {
+			const cards = this.sortCards(when)
+			if (!cards || cards.length === 0) {
+				return []
+			}
+			return groupCardsByProject(cards, this.t('deck', 'Other'))
+		},
 	},
 
 }
@@ -183,6 +209,34 @@ export default {
 			z-index: 100;
 			background-color: var(--color-main-background);
 			border: 1px solid var(--color-main-background);
+		}
+	}
+
+	.project-group {
+		& + & {
+			margin-top: 12px;
+			padding-top: 8px;
+			border-top: 1px solid var(--color-border);
+		}
+	}
+
+	.project-group__title {
+		margin: 0 0 4px;
+		padding: 2px 0;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--color-text-maxcontrast);
+		display: flex;
+		align-items: center;
+		gap: 6px;
+
+		&::before {
+			content: '';
+			display: inline-block;
+			width: 3px;
+			height: 1em;
+			background-color: var(--color-primary-element);
+			border-radius: 2px;
 		}
 	}
 }
