@@ -32,7 +32,11 @@ use OCA\Deck\Db\IPermissionMapper;
 use OCA\Deck\Db\User;
 use OCA\Deck\NoPermissionException;
 use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\DB\IResult;
+use OCP\DB\QueryBuilder\IExpressionBuilder;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IConfig;
+use OCP\IDBConnection;
 use OCP\IGroup;
 use OCP\IGroupManager;
 use OCP\IRequest;
@@ -53,6 +57,7 @@ class PermissionServiceTest extends \Test\TestCase {
 	private IGroupManager|MockObject $groupManager;
 	private MockObject|IManager $shareManager;
 	private IConfig|MockObject $config;
+	private IDBConnection|MockObject $db;
 
 	public function setUp(): void {
 		parent::setUp();
@@ -65,6 +70,7 @@ class PermissionServiceTest extends \Test\TestCase {
 		$this->groupManager = $this->createMock(IGroupManager::class);
 		$this->shareManager = $this->createMock(IManager::class);
 		$this->config = $this->createMock(IConfig::class);
+		$this->db = $this->createMock(IDBConnection::class);
 
 		$this->service = new PermissionService(
 			$this->logger,
@@ -75,7 +81,8 @@ class PermissionServiceTest extends \Test\TestCase {
 			$this->groupManager,
 			$this->shareManager,
 			$this->config,
-			'admin'
+			'admin',
+			$this->db,
 		);
 	}
 
@@ -129,6 +136,73 @@ class PermissionServiceTest extends \Test\TestCase {
 			Acl::PERMISSION_SHARE => false,
 		];
 		$this->assertEquals($expected, $this->service->getPermissions(123));
+	}
+
+	public function testGetPermissionsSuperAdminCanManageProjectBoard(): void {
+		$board = new Board();
+		$board->setOwner('user1');
+		$this->boardMapper->method('find')->with(123)->willReturn($board);
+		$this->aclMapper->method('findAll')->with(123)->willReturn([]);
+		$this->mockProjectLookup(['owner_id' => 'user1', 'organization_id' => 42]);
+		$this->groupManager->expects($this->once())->method('isAdmin')->with('admin')->willReturn(true);
+		$this->shareManager->method('sharingDisabledForUser')->with('admin')->willReturn(false);
+
+		$this->assertSame([
+			Acl::PERMISSION_READ => true,
+			Acl::PERMISSION_EDIT => true,
+			Acl::PERMISSION_MANAGE => true,
+			Acl::PERMISSION_SHARE => true,
+		], $this->service->getPermissions(123));
+	}
+
+	public function testGetPermissionsSuperAdminCannotAccessOrdinaryBoard(): void {
+		$board = new Board();
+		$board->setOwner('user1');
+		$this->boardMapper->method('find')->with(123)->willReturn($board);
+		$this->aclMapper->method('findAll')->with(123)->willReturn([]);
+		$this->mockProjectLookup(false);
+		$this->groupManager->expects($this->never())->method('isAdmin');
+
+		$this->assertSame([
+			Acl::PERMISSION_READ => false,
+			Acl::PERMISSION_EDIT => false,
+			Acl::PERMISSION_MANAGE => false,
+			Acl::PERMISSION_SHARE => false,
+		], $this->service->getPermissions(123));
+	}
+
+	public function testGetPermissionsProjectOwnerRemainsReadOnly(): void {
+		$board = new Board();
+		$board->setOwner('user1');
+		$this->boardMapper->method('find')->with(123)->willReturn($board);
+		$this->aclMapper->method('findAll')->with(123)->willReturn([]);
+		$this->mockProjectLookup(['owner_id' => 'admin', 'organization_id' => 42]);
+		$this->groupManager->expects($this->once())->method('isAdmin')->with('admin')->willReturn(false);
+
+		$this->assertSame([
+			Acl::PERMISSION_READ => true,
+			Acl::PERMISSION_EDIT => false,
+			Acl::PERMISSION_MANAGE => false,
+			Acl::PERMISSION_SHARE => false,
+		], $this->service->getPermissions(123));
+	}
+
+	public function testMatchPermissionsIncludesProjectSuperAdminAccess(): void {
+		$board = new Board();
+		$board->setId(123);
+		$board->setOwner('user1');
+		$board->setAcl([]);
+		$this->boardMapper->method('find')->with(123)->willReturn($board);
+		$this->mockProjectLookup(['owner_id' => 'user1', 'organization_id' => 42]);
+		$this->groupManager->expects($this->once())->method('isAdmin')->with('admin')->willReturn(true);
+		$this->shareManager->method('sharingDisabledForUser')->with('admin')->willReturn(false);
+
+		$this->assertSame([
+			Acl::PERMISSION_READ => true,
+			Acl::PERMISSION_EDIT => true,
+			Acl::PERMISSION_MANAGE => true,
+			Acl::PERMISSION_SHARE => true,
+		], $this->service->matchPermissions($board));
 	}
 
 	public function testUserIsBoardOwner() {
@@ -308,6 +382,25 @@ class PermissionServiceTest extends \Test\TestCase {
 			}
 		}
 		return $result;
+	}
+
+	private function mockProjectLookup(array|false $row): void {
+		$expressionBuilder = $this->createMock(IExpressionBuilder::class);
+		$expressionBuilder->method('eq')->willReturn('board_id = :boardId');
+
+		$result = $this->createMock(IResult::class);
+		$result->expects($this->once())->method('fetch')->willReturn($row);
+		$result->expects($this->once())->method('closeCursor')->willReturn(true);
+
+		$queryBuilder = $this->createMock(IQueryBuilder::class);
+		$queryBuilder->method('expr')->willReturn($expressionBuilder);
+		$queryBuilder->method('select')->willReturnSelf();
+		$queryBuilder->method('from')->willReturnSelf();
+		$queryBuilder->method('where')->willReturnSelf();
+		$queryBuilder->method('setMaxResults')->willReturnSelf();
+		$queryBuilder->method('createNamedParameter')->willReturn(':boardId');
+		$queryBuilder->method('executeQuery')->willReturn($result);
+		$this->db->expects($this->once())->method('getQueryBuilder')->willReturn($queryBuilder);
 	}
 
 	public function testFindUsersFail() {

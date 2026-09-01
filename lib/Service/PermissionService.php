@@ -72,32 +72,28 @@ class PermissionService {
 			$acls = [];
 		}
 
-		// Project/organization admins may read project-linked boards even if not in board ACL.
-		$projectAdminRead = false;
+		$projectAccess = ['read' => false, 'manage' => false];
 		if (!$owner) {
-			$projectAdminRead = $this->userIsProjectOwnerOrOrganizationAdmin($boardId, (string) $userId);
+			$projectAccess = $this->getProjectAccess($boardId, (string) $userId);
 		}
 
 		$permissions = [
-			Acl::PERMISSION_READ => $owner || $projectAdminRead || $this->userCan($acls, Acl::PERMISSION_READ, $userId),
-			Acl::PERMISSION_EDIT => $owner || $this->userCan($acls, Acl::PERMISSION_EDIT, $userId),
-			Acl::PERMISSION_MANAGE => $owner || $this->userCan($acls, Acl::PERMISSION_MANAGE, $userId),
-			Acl::PERMISSION_SHARE => ($owner || $this->userCan($acls, Acl::PERMISSION_SHARE, $userId))
+			Acl::PERMISSION_READ => $owner || $projectAccess['read'] || $this->userCan($acls, Acl::PERMISSION_READ, $userId),
+			Acl::PERMISSION_EDIT => $owner || $projectAccess['manage'] || $this->userCan($acls, Acl::PERMISSION_EDIT, $userId),
+			Acl::PERMISSION_MANAGE => $owner || $projectAccess['manage'] || $this->userCan($acls, Acl::PERMISSION_MANAGE, $userId),
+			Acl::PERMISSION_SHARE => ($owner || $projectAccess['manage'] || $this->userCan($acls, Acl::PERMISSION_SHARE, $userId))
 				&& (!$this->shareManager->sharingDisabledForUser($userId))
 		];
 		$this->permissionCache->set($cacheKey, $permissions);
 		return $permissions;
 	}
 
-	private function userIsProjectOwnerOrOrganizationAdmin(int $boardId, string $userId): bool
+	/** @return array{read: bool, manage: bool} */
+	private function getProjectAccess(int $boardId, string $userId): array
 	{
 		$userId = trim($userId);
 		if ($userId === '' || $boardId <= 0 || !$this->db instanceof IDBConnection) {
-			return false;
-		}
-
-		if ($this->groupManager->isAdmin($userId)) {
-			return true;
+			return ['read' => false, 'manage' => false];
 		}
 
 		try {
@@ -110,17 +106,21 @@ class PermissionService {
 			$row = $res->fetch();
 			$res->closeCursor();
 			if ($row === false) {
-				return false;
+				return ['read' => false, 'manage' => false];
+			}
+
+			if ($this->groupManager->isAdmin($userId)) {
+				return ['read' => true, 'manage' => true];
 			}
 
 			$ownerId = trim((string) ($row['owner_id'] ?? ''));
 			if ($ownerId !== '' && $ownerId === $userId) {
-				return true;
+				return ['read' => true, 'manage' => false];
 			}
 
 			$orgId = isset($row['organization_id']) && $row['organization_id'] !== null ? (int) $row['organization_id'] : 0;
 			if ($orgId <= 0) {
-				return false;
+				return ['read' => false, 'manage' => false];
 			}
 
 			$qb = $this->db->getQueryBuilder();
@@ -133,9 +133,9 @@ class PermissionService {
 			$res = $qb->executeQuery();
 			$ok = $res->fetch() !== false;
 			$res->closeCursor();
-			return $ok;
+			return ['read' => $ok, 'manage' => false];
 		} catch (\Throwable $e) {
-			return false;
+			return ['read' => false, 'manage' => false];
 		}
 	}
 
@@ -147,13 +147,21 @@ class PermissionService {
 	 * @internal param $boardId
 	 */
 	public function matchPermissions(Board $board) {
+		$cacheKey = $board->getId() . '-' . $this->userId;
+		if ($this->permissionCache->hasKey($cacheKey)) {
+			return $this->permissionCache->get($cacheKey);
+		}
+
 		$owner = $this->userIsBoardOwner($board->getId());
 		$acls = $board->getAcl() ?? [];
+		$projectAccess = $owner
+			? ['read' => false, 'manage' => false]
+			: $this->getProjectAccess($board->getId(), (string) $this->userId);
 		return [
-			Acl::PERMISSION_READ => $owner || $this->userCan($acls, Acl::PERMISSION_READ),
-			Acl::PERMISSION_EDIT => $owner || $this->userCan($acls, Acl::PERMISSION_EDIT),
-			Acl::PERMISSION_MANAGE => $owner || $this->userCan($acls, Acl::PERMISSION_MANAGE),
-			Acl::PERMISSION_SHARE => ($owner || $this->userCan($acls, Acl::PERMISSION_SHARE))
+			Acl::PERMISSION_READ => $owner || $projectAccess['read'] || $this->userCan($acls, Acl::PERMISSION_READ),
+			Acl::PERMISSION_EDIT => $owner || $projectAccess['manage'] || $this->userCan($acls, Acl::PERMISSION_EDIT),
+			Acl::PERMISSION_MANAGE => $owner || $projectAccess['manage'] || $this->userCan($acls, Acl::PERMISSION_MANAGE),
+			Acl::PERMISSION_SHARE => ($owner || $projectAccess['manage'] || $this->userCan($acls, Acl::PERMISSION_SHARE))
 				&& (!$this->shareManager->sharingDisabledForUser($this->userId))
 		];
 	}
